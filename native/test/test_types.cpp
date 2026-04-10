@@ -78,6 +78,23 @@ TEST(ConnmanTypes, TechnologyPropsTetheringRoundtrip) {
   EXPECT_TRUE(decoded.tetheringPassphrase.empty());
 }
 
+TEST(ConnmanTypes, TechnologyPropsDefaultsRoundtrip) {
+  ConnmanTechnologyProps orig;
+
+  auto buf = glz::encode(orig);
+  ConnmanTechnologyProps decoded;
+  glz::decode(buf.data(), 0, decoded);
+
+  EXPECT_TRUE(decoded.objectPath.empty());
+  EXPECT_TRUE(decoded.name.empty());
+  EXPECT_TRUE(decoded.type.empty());
+  EXPECT_FALSE(decoded.powered);
+  EXPECT_FALSE(decoded.connected);
+  EXPECT_FALSE(decoded.tethering);
+  EXPECT_TRUE(decoded.tetheringIdentifier.empty());
+  EXPECT_TRUE(decoded.tetheringPassphrase.empty());
+}
+
 // ── ConnmanServiceProps ─────────────────────────────────────────────────────
 
 TEST(ConnmanTypes, ServicePropsRoundtrip) {
@@ -130,6 +147,30 @@ TEST(ConnmanTypes, ServicePropsEmptyVectors) {
   EXPECT_TRUE(decoded.security.empty());
   EXPECT_TRUE(decoded.nameservers.empty());
   EXPECT_TRUE(decoded.domains.empty());
+}
+
+TEST(ConnmanTypes, ServicePropsNegativeStrength) {
+  ConnmanServiceProps orig;
+  orig.strength = -42; // Testing edge case where it might be expressed as dBm negatively
+
+  auto buf = glz::encode(orig);
+  ConnmanServiceProps decoded;
+  glz::decode(buf.data(), 0, decoded);
+
+  EXPECT_EQ(decoded.strength, -42);
+}
+
+TEST(ConnmanTypes, ServicePropsLargePayload) {
+  ConnmanServiceProps orig;
+  // Simulating 512 different domains mapping to maximum IP allocations
+  orig.domains.resize(512, "localdomain");
+
+  auto buf = glz::encode(orig);
+  ConnmanServiceProps decoded;
+  glz::decode(buf.data(), 0, decoded);
+
+  ASSERT_EQ(decoded.domains.size(), 512u);
+  EXPECT_EQ(decoded.domains[500], "localdomain");
 }
 
 // ── ConnmanError ────────────────────────────────────────────────────────────
