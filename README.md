@@ -13,8 +13,9 @@ and the Flutter guide for
 
 # connman_native_comms
 
-TODO: Put a short description of the package here that helps potential users
-know whether this package might be useful for them.
+High-performance Connection Manager (ConnMan) client for Linux.
+
+**Note:** This project is mostly inspired by and adapted from [jwinarske/bluez_native_comms](https://github.com/jwinarske/bluez_native_comms).
 
 ## Features
 
