@@ -220,3 +220,123 @@ TEST(ConnmanTypes, ErrorEmptyMessage) {
   EXPECT_EQ(decoded.name, orig.name);
   EXPECT_TRUE(decoded.message.empty());
 }
+
+// ── ConnmanError: D-Bus error name variants ──────────────────────────────────
+
+TEST(ConnmanTypes, ErrorInvalidArguments) {
+  ConnmanError orig;
+  orig.objectPath = "/net/connman/technology/wifi";
+  orig.name       = "net.connman.Error.InvalidArguments";
+  orig.message    = "Wrong parameter type for Powered";
+
+  auto buf = glz::encode(orig);
+  ConnmanError decoded;
+  glz::decode(buf.data(), 0, decoded);
+
+  EXPECT_EQ(decoded.name, "net.connman.Error.InvalidArguments");
+  EXPECT_FALSE(decoded.message.empty());
+}
+
+TEST(ConnmanTypes, ErrorServiceAlreadyConnected) {
+  ConnmanError orig;
+  orig.objectPath = "/net/connman/service/wifi_home_managed_psk";
+  orig.name       = "net.connman.Error.AlreadyConnected";
+  orig.message    = "Already connected";
+
+  auto buf = glz::encode(orig);
+  ConnmanError decoded;
+  glz::decode(buf.data(), 0, decoded);
+
+  EXPECT_EQ(decoded.name, "net.connman.Error.AlreadyConnected");
+}
+
+TEST(ConnmanTypes, ErrorAuthenticationFailure) {
+  ConnmanError orig;
+  orig.objectPath = "/net/connman/service/wifi_home_managed_psk";
+  orig.name       = "net.connman.Error.Failed";
+  orig.message    = "connect failed: Input/output error";
+
+  auto buf = glz::encode(orig);
+  ConnmanError decoded;
+  glz::decode(buf.data(), 0, decoded);
+
+  EXPECT_EQ(decoded.name, "net.connman.Error.Failed");
+  EXPECT_EQ(decoded.objectPath, orig.objectPath);
+}
+
+TEST(ConnmanTypes, ErrorPropertyNotFound) {
+  ConnmanError orig;
+  orig.objectPath = "/net/connman/service/ethernet_wired";
+  orig.name       = "net.connman.Error.InvalidProperty";
+  orig.message    = "No such property";
+
+  auto buf = glz::encode(orig);
+  ConnmanError decoded;
+  glz::decode(buf.data(), 0, decoded);
+
+  EXPECT_EQ(decoded.name, "net.connman.Error.InvalidProperty");
+}
+
+TEST(ConnmanTypes, ErrorTimeout) {
+  ConnmanError orig;
+  orig.objectPath = "/net/connman/service/wifi_open";
+  orig.name       = "net.connman.Error.OperationTimeout";
+  orig.message    = "Operation timed out";
+
+  auto buf = glz::encode(orig);
+  ConnmanError decoded;
+  glz::decode(buf.data(), 0, decoded);
+
+  EXPECT_EQ(decoded.name, "net.connman.Error.OperationTimeout");
+  EXPECT_EQ(decoded.message, "Operation timed out");
+}
+
+TEST(ConnmanTypes, ErrorUnknownWithContext) {
+  ConnmanError orig;
+  orig.objectPath = "/net/connman/technology/bluetooth";
+  orig.name       = "org.freedesktop.DBus.Error.UnknownMethod";
+  orig.message    = "Method Scan not found";
+
+  auto buf = glz::encode(orig);
+  ConnmanError decoded;
+  glz::decode(buf.data(), 0, decoded);
+
+  EXPECT_EQ(decoded.name, "org.freedesktop.DBus.Error.UnknownMethod");
+  EXPECT_EQ(decoded.objectPath, "/net/connman/technology/bluetooth");
+}
+
+// ── ConnmanMethodSuccess ─────────────────────────────────────────────────────
+
+TEST(ConnmanTypes, MethodSuccessRoundtrip) {
+  ConnmanMethodSuccess orig;
+  orig.objectPath = "/net/connman/service/wifi_home_managed_psk";
+
+  auto buf = glz::encode(orig);
+  ConnmanMethodSuccess decoded;
+  auto end = glz::decode(buf.data(), 0, decoded);
+
+  EXPECT_EQ(end, buf.size());
+  EXPECT_EQ(decoded.objectPath, orig.objectPath);
+}
+
+TEST(ConnmanTypes, MethodSuccessTechnologyPath) {
+  ConnmanMethodSuccess orig;
+  orig.objectPath = "/net/connman/technology/wifi";
+
+  auto buf = glz::encode(orig);
+  ConnmanMethodSuccess decoded;
+  glz::decode(buf.data(), 0, decoded);
+
+  EXPECT_EQ(decoded.objectPath, "/net/connman/technology/wifi");
+}
+
+TEST(ConnmanTypes, MethodSuccessEmptyPath) {
+  ConnmanMethodSuccess orig;  // default — empty path
+
+  auto buf = glz::encode(orig);
+  ConnmanMethodSuccess decoded;
+  auto end = glz::decode(buf.data(), 0, decoded);
+
+  EXPECT_EQ(end, buf.size());
+  EXPECT_TRUE(decoded.objectPath.empty());
+}

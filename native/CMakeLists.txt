@@ -22,6 +22,8 @@ target_include_directories(connman_types INTERFACE include)
 # ── Connman Manager library ───────────────────────────────────────────────────
 add_library(connman_manager STATIC
     src/connman_manager.cpp
+    src/technology_bridge.cpp
+    src/service_bridge.cpp
     $<TARGET_OBJECTS:dart_api_dl>
 )
 
