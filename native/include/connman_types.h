@@ -12,12 +12,27 @@
 //   0xFF = sentinel                 (stream done)
 
 #pragma once
-#include "glaze_meta.h"
 
 #include <cstdint>
 #include <map>
 #include <string>
 #include <vector>
+
+#include "glaze_meta.h"
+
+// ── Message discriminators ──────────────────────────────────────────────────
+
+namespace connman::msg {
+static constexpr uint8_t kManagerProps      = 0x01;
+static constexpr uint8_t kTechnologyProps   = 0x02;
+static constexpr uint8_t kServiceProps      = 0x03;
+static constexpr uint8_t kServiceChanged    = 0x04;
+static constexpr uint8_t kServiceRemoved    = 0x05;
+static constexpr uint8_t kTechnologyAdded   = 0x06;
+static constexpr uint8_t kTechnologyRemoved = 0x07;
+static constexpr uint8_t kError             = 0x20;
+static constexpr uint8_t kDone              = 0xFF;
+}  // namespace connman::msg
 
 // ── Manager properties ──────────────────────────────────────────────────────
 
@@ -90,6 +105,17 @@ struct glz::meta<ConnmanServiceProps> {
       glz::field("security", &ConnmanServiceProps::security),
       glz::field("nameservers", &ConnmanServiceProps::nameservers),
       glz::field("domains", &ConnmanServiceProps::domains));
+};
+
+// ── Removed signal payload ──────────────────────────────────────────────────
+
+struct ConnmanObjectRemoved {
+  std::string objectPath;
+};
+template <>
+struct glz::meta<ConnmanObjectRemoved> {
+  static constexpr auto fields = std::make_tuple(
+      glz::field("objectPath", &ConnmanObjectRemoved::objectPath));
 };
 
 // ── Error ───────────────────────────────────────────────────────────────────
