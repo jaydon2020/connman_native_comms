@@ -173,6 +173,20 @@ TEST(ConnmanTypes, ServicePropsLargePayload) {
   EXPECT_EQ(decoded.domains[500], "localdomain");
 }
 
+// ── ConnmanObjectRemoved ────────────────────────────────────────────────────
+
+TEST(ConnmanTypes, ObjectRemovedRoundtrip) {
+  ConnmanObjectRemoved orig;
+  orig.objectPath = "/net/connman/service/wifi_123";
+
+  auto buf = glz::encode(orig);
+  ConnmanObjectRemoved decoded;
+  auto end = glz::decode(buf.data(), 0, decoded);
+
+  EXPECT_EQ(end, buf.size());
+  EXPECT_EQ(decoded.objectPath, orig.objectPath);
+}
+
 // ── ConnmanError ────────────────────────────────────────────────────────────
 
 TEST(ConnmanTypes, ErrorRoundtrip) {
