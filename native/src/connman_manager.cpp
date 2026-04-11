@@ -1,6 +1,7 @@
 #include "connman_manager.h"
 
 #include <iostream>
+#include <mutex>
 
 using namespace connman::msg;
 
@@ -22,31 +23,46 @@ ConnmanManager::ConnmanManager(sdbus::IConnection& conn,
 // ── Snapshot / Initial state fetching ───────────────────────────────────────
 
 void ConnmanManager::get_managed_objects() {
+  // Fetch the full D-Bus state outside the lock — these are blocking calls
+  // and we must not hold the mutex while waiting on D-Bus.
+  ConnmanManagerProps mgr_props;
+  std::map<std::string, ConnmanTechnologyProps> new_technologies;
+  std::map<std::string, ConnmanServiceProps> new_services;
+
   try {
-    // 1. Fetch Manager Properties
-    auto props = GetProperties();
-    auto mgr_props = extract_manager_props(props);
-    post_glaze(kManagerProps, mgr_props);
+    mgr_props = extract_manager_props(GetProperties());
 
-    // 2. Fetch all Technologies
-    auto techs = GetTechnologies();
-    for (const auto& tech : techs) {
-      auto tech_props = extract_technology_props(tech.get<0>(), tech.get<1>());
-      post_glaze(kTechnologyProps, tech_props);
+    for (const auto& tech : GetTechnologies()) {
+      auto p = extract_technology_props(tech.get<0>(), tech.get<1>());
+      new_technologies[p.objectPath] = p;
     }
 
-    // 3. Fetch all Services
-    auto services = GetServices();
-    for (const auto& svc : services) {
-      auto svc_props = extract_service_props(svc.get<0>(), svc.get<1>());
-      post_glaze(kServiceProps, svc_props);
+    for (const auto& svc : GetServices()) {
+      auto p = extract_service_props(svc.get<0>(), svc.get<1>());
+      new_services[p.objectPath] = p;
     }
-
   } catch (const sdbus::Error& e) {
     std::cerr << "ConnmanManager::get_managed_objects failed: " << e.getName()
               << " - " << e.getMessage() << "\n";
-    ConnmanError err{ConnmanManagerProxyHolder::kConnmanService, e.getName(), e.getMessage()};
-    post_glaze(kError, err);
+    post_glaze(kError,
+               ConnmanError{ConnmanManagerProxyHolder::kService, e.getName(),
+                            e.getMessage()});
+    return;
+  }
+
+  // Commit to the object tree and post the initial snapshot atomically so
+  // signal handlers cannot interleave their posts with ours.
+  std::scoped_lock lock(obj_tree_mutex_);
+
+  technologies_ = std::move(new_technologies);
+  services_     = std::move(new_services);
+
+  post_glaze(kManagerProps, mgr_props);
+  for (const auto& [path, tech] : technologies_) {
+    post_glaze(kTechnologyProps, tech);
+  }
+  for (const auto& [path, svc] : services_) {
+    post_glaze(kServiceProps, svc);
   }
 }
 
@@ -112,43 +128,58 @@ ConnmanServiceProps ConnmanManager::extract_service_props(
 
 void ConnmanManager::onPropertyChanged([[maybe_unused]] const std::string& name,
                                        [[maybe_unused]] const sdbus::Variant& value) {
+  // Fetch outside the lock — blocking D-Bus call.
+  ConnmanManagerProps mgr_props;
   try {
-    // Fetch the full properties map on every change rather than applying partial
-    // updates — keeps the Dart side stateless and avoids partial-update handlers.
-    auto props = GetProperties();
-    auto mgr_props = extract_manager_props(props);
-    post_glaze(kManagerProps, mgr_props);
+    mgr_props = extract_manager_props(GetProperties());
   } catch (const sdbus::Error& e) {
     std::cerr << "onPropertyChanged fetch failed: " << e.getMessage() << "\n";
+    return;
   }
+
+  // Manager props have no object-tree entry; just post under the lock so the
+  // post is sequenced with any concurrent get_managed_objects().
+  std::scoped_lock lock(obj_tree_mutex_);
+  post_glaze(kManagerProps, mgr_props);
 }
 
 void ConnmanManager::onTechnologyAdded(
     const sdbus::ObjectPath& path,
     const std::map<std::string, sdbus::Variant>& properties) {
   auto tech_props = extract_technology_props(path, properties);
+
+  std::scoped_lock lock(obj_tree_mutex_);
+  technologies_[tech_props.objectPath] = tech_props;
   post_glaze(kTechnologyAdded, tech_props);
 }
 
 void ConnmanManager::onTechnologyRemoved(const sdbus::ObjectPath& path) {
-  ConnmanObjectRemoved removed{path};
-  post_glaze(kTechnologyRemoved, removed);
+  std::scoped_lock lock(obj_tree_mutex_);
+  technologies_.erase(path);
+  post_glaze(kTechnologyRemoved, ConnmanObjectRemoved{path});
 }
 
 void ConnmanManager::onServicesChanged(
     const std::vector<sdbus::Struct<sdbus::ObjectPath,
                                     std::map<std::string, sdbus::Variant>>>& changed,
     const std::vector<sdbus::ObjectPath>& removed) {
-  // Process all modified or added services
+  // Build updates outside the lock.
+  std::vector<ConnmanServiceProps> changed_props;
+  changed_props.reserve(changed.size());
   for (const auto& svc : changed) {
-    auto svc_props = extract_service_props(svc.get<0>(), svc.get<1>());
-    post_glaze(kServiceChanged, svc_props);
+    changed_props.push_back(extract_service_props(svc.get<0>(), svc.get<1>()));
   }
 
-  // Process all removed services
-  for (const auto& rm_path : removed) {
-    ConnmanObjectRemoved obj{rm_path};
-    post_glaze(kServiceRemoved, obj);
+  std::scoped_lock lock(obj_tree_mutex_);
+
+  for (const auto& props : changed_props) {
+    services_[props.objectPath] = props;
+    post_glaze(kServiceChanged, props);
+  }
+
+  for (const auto& path : removed) {
+    services_.erase(path);
+    post_glaze(kServiceRemoved, ConnmanObjectRemoved{path});
   }
 }
 

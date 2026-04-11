@@ -4,12 +4,12 @@
 //   0x01 = ConnmanManagerProps      (Manager PropertiesChanged or initial state)
 //   0x02 = ConnmanTechnologyProps   (Technology PropertiesChanged or initial state)
 //   0x03 = ConnmanServiceProps      (Service PropertiesChanged or initial state)
-//   0x04 = ConnmanServiceAdded      (ServicesAdded signal)
+//   0x04 = ConnmanServiceChanged    (ServicesChanged signal — added or modified)
 //   0x05 = ConnmanServiceRemoved    (ServicesRemoved signal)
 //   0x06 = ConnmanTechnologyAdded   (TechnologyAdded signal)
 //   0x07 = ConnmanTechnologyRemoved (TechnologyRemoved signal)
 //   0x20 = ConnmanError             (method call failed)
-//   0xFF = sentinel                 (stream done)
+//   0xFF = ConnmanMethodSuccess     (one-shot method call succeeded)
 
 #pragma once
 
@@ -116,6 +116,17 @@ template <>
 struct glz::meta<ConnmanObjectRemoved> {
   static constexpr auto fields = std::make_tuple(
       glz::field("objectPath", &ConnmanObjectRemoved::objectPath));
+};
+
+// ── Method success ──────────────────────────────────────────────────────────
+
+struct ConnmanMethodSuccess {
+  std::string objectPath;  // which object completed the operation
+};
+template <>
+struct glz::meta<ConnmanMethodSuccess> {
+  static constexpr auto fields = std::make_tuple(
+      glz::field("objectPath", &ConnmanMethodSuccess::objectPath));
 };
 
 // ── Error ───────────────────────────────────────────────────────────────────

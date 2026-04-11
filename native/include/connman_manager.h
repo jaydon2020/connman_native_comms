@@ -14,6 +14,7 @@
 
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -23,14 +24,14 @@
 
 // Base struct to guarantee sdbus::IProxy initializes before Manager_proxy.
 struct ConnmanManagerProxyHolder {
-  static constexpr auto kConnmanService = "net.connman";
-  static constexpr auto kManagerPath    = "/";
+  static constexpr auto kService     = "net.connman";
+  static constexpr auto kManagerPath = "/";
 
   std::unique_ptr<sdbus::IProxy> proxy_;
   explicit ConnmanManagerProxyHolder(sdbus::IConnection& conn)
       : proxy_(sdbus::createProxy(
             conn,
-            sdbus::ServiceName{kConnmanService},
+            sdbus::ServiceName{kService},
             sdbus::ObjectPath{kManagerPath})) {}
 };
 
@@ -96,6 +97,15 @@ class ConnmanManager : private ConnmanManagerProxyHolder,
  private:
   sdbus::IConnection& conn_;
   Dart_Port_DL events_port_;
+
+  // ── Object tree ─────────────────────────────────────────────────────────
+  // Mirrors the live ConnMan object tree in memory.
+  // Written by get_managed_objects() (caller thread) and by signal handlers
+  // (sdbus event loop thread) — both must hold obj_tree_mutex_.
+
+  mutable std::mutex obj_tree_mutex_;
+  std::map<std::string, ConnmanTechnologyProps> technologies_;
+  std::map<std::string, ConnmanServiceProps> services_;
 
   // ── Dart posting helper ─────────────────────────────────────────────────
 
