@@ -16,8 +16,7 @@ class ServiceBridge {
   static constexpr auto kServiceIface = "net.connman.Service";
 
   // Associate with the network and obtain an IP address.
-  static void connect(const std::string& object_path,
-                      Dart_Port_DL result_port);
+  static void connect(const std::string& object_path, Dart_Port_DL result_port);
 
   // Disconnect from the network.
   static void disconnect(const std::string& object_path,

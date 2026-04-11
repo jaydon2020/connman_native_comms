@@ -44,9 +44,8 @@ void ConnmanManager::get_managed_objects() {
   } catch (const sdbus::Error& e) {
     std::cerr << "ConnmanManager::get_managed_objects failed: " << e.getName()
               << " - " << e.getMessage() << "\n";
-    post_glaze(kError,
-               ConnmanError{ConnmanManagerProxyHolder::kService, e.getName(),
-                            e.getMessage()});
+    post_glaze(kError, ConnmanError{ConnmanManagerProxyHolder::kService,
+                                    e.getName(), e.getMessage()});
     return;
   }
 
@@ -55,7 +54,7 @@ void ConnmanManager::get_managed_objects() {
   std::scoped_lock lock(obj_tree_mutex_);
 
   technologies_ = std::move(new_technologies);
-  services_     = std::move(new_services);
+  services_ = std::move(new_services);
 
   post_glaze(kManagerProps, mgr_props);
   for (const auto& [path, tech] : technologies_) {
@@ -126,8 +125,9 @@ ConnmanServiceProps ConnmanManager::extract_service_props(
 
 // ── Signal Handlers ─────────────────────────────────────────────────────────
 
-void ConnmanManager::onPropertyChanged([[maybe_unused]] const std::string& name,
-                                       [[maybe_unused]] const sdbus::Variant& value) {
+void ConnmanManager::onPropertyChanged(
+    [[maybe_unused]] const std::string& name,
+    [[maybe_unused]] const sdbus::Variant& value) {
   // Fetch outside the lock — blocking D-Bus call.
   ConnmanManagerProps mgr_props;
   try {
@@ -161,7 +161,8 @@ void ConnmanManager::onTechnologyRemoved(const sdbus::ObjectPath& path) {
 
 void ConnmanManager::onServicesChanged(
     const std::vector<sdbus::Struct<sdbus::ObjectPath,
-                                    std::map<std::string, sdbus::Variant>>>& changed,
+                                    std::map<std::string, sdbus::Variant>>>&
+        changed,
     const std::vector<sdbus::ObjectPath>& removed) {
   // Build updates outside the lock.
   std::vector<ConnmanServiceProps> changed_props;
@@ -204,7 +205,8 @@ void ConnmanManager::post_glaze(uint8_t discriminator, const T& value) {
 
 // Explicit template instantiations for all posted types.
 template void ConnmanManager::post_glaze(uint8_t, const ConnmanManagerProps&);
-template void ConnmanManager::post_glaze(uint8_t, const ConnmanTechnologyProps&);
+template void ConnmanManager::post_glaze(uint8_t,
+                                         const ConnmanTechnologyProps&);
 template void ConnmanManager::post_glaze(uint8_t, const ConnmanServiceProps&);
 template void ConnmanManager::post_glaze(uint8_t, const ConnmanObjectRemoved&);
 template void ConnmanManager::post_glaze(uint8_t, const ConnmanError&);

@@ -1,11 +1,11 @@
 // connman_types.h — wire types for all ConnMan-to-Dart payloads.
 //
 // Message discriminator byte at offset 0 in kExternalTypedData:
-//   0x01 = ConnmanManagerProps      (Manager PropertiesChanged or initial state)
-//   0x02 = ConnmanTechnologyProps   (Technology PropertiesChanged or initial state)
-//   0x03 = ConnmanServiceProps      (Service PropertiesChanged or initial state)
-//   0x04 = ConnmanServiceChanged    (ServicesChanged signal — added or modified)
-//   0x05 = ConnmanServiceRemoved    (ServicesRemoved signal)
+//   0x01 = ConnmanManagerProps      (Manager PropertiesChanged or initial
+//   state) 0x02 = ConnmanTechnologyProps   (Technology PropertiesChanged or
+//   initial state) 0x03 = ConnmanServiceProps      (Service PropertiesChanged
+//   or initial state) 0x04 = ConnmanServiceChanged    (ServicesChanged signal —
+//   added or modified) 0x05 = ConnmanServiceRemoved    (ServicesRemoved signal)
 //   0x06 = ConnmanTechnologyAdded   (TechnologyAdded signal)
 //   0x07 = ConnmanTechnologyRemoved (TechnologyRemoved signal)
 //   0x20 = ConnmanError             (method call failed)
@@ -23,15 +23,15 @@
 // ── Message discriminators ──────────────────────────────────────────────────
 
 namespace connman::msg {
-static constexpr uint8_t kManagerProps      = 0x01;
-static constexpr uint8_t kTechnologyProps   = 0x02;
-static constexpr uint8_t kServiceProps      = 0x03;
-static constexpr uint8_t kServiceChanged    = 0x04;
-static constexpr uint8_t kServiceRemoved    = 0x05;
-static constexpr uint8_t kTechnologyAdded   = 0x06;
+static constexpr uint8_t kManagerProps = 0x01;
+static constexpr uint8_t kTechnologyProps = 0x02;
+static constexpr uint8_t kServiceProps = 0x03;
+static constexpr uint8_t kServiceChanged = 0x04;
+static constexpr uint8_t kServiceRemoved = 0x05;
+static constexpr uint8_t kTechnologyAdded = 0x06;
 static constexpr uint8_t kTechnologyRemoved = 0x07;
-static constexpr uint8_t kError             = 0x20;
-static constexpr uint8_t kDone              = 0xFF;
+static constexpr uint8_t kError = 0x20;
+static constexpr uint8_t kDone = 0xFF;
 }  // namespace connman::msg
 
 // ── Manager properties ──────────────────────────────────────────────────────
@@ -70,8 +70,10 @@ struct glz::meta<ConnmanTechnologyProps> {
       glz::field("powered", &ConnmanTechnologyProps::powered),
       glz::field("connected", &ConnmanTechnologyProps::connected),
       glz::field("tethering", &ConnmanTechnologyProps::tethering),
-      glz::field("tetheringIdentifier", &ConnmanTechnologyProps::tetheringIdentifier),
-      glz::field("tetheringPassphrase", &ConnmanTechnologyProps::tetheringPassphrase));
+      glz::field("tetheringIdentifier",
+                 &ConnmanTechnologyProps::tetheringIdentifier),
+      glz::field("tetheringPassphrase",
+                 &ConnmanTechnologyProps::tetheringPassphrase));
 };
 
 // ── Service properties ──────────────────────────────────────────────────────
@@ -138,8 +140,8 @@ struct ConnmanError {
 };
 template <>
 struct glz::meta<ConnmanError> {
-  static constexpr auto fields = std::make_tuple(
-      glz::field("objectPath", &ConnmanError::objectPath),
-      glz::field("name", &ConnmanError::name),
-      glz::field("message", &ConnmanError::message));
+  static constexpr auto fields =
+      std::make_tuple(glz::field("objectPath", &ConnmanError::objectPath),
+                      glz::field("name", &ConnmanError::name),
+                      glz::field("message", &ConnmanError::message));
 };

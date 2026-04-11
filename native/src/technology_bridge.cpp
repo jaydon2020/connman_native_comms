@@ -18,8 +18,7 @@ static constexpr auto kConnmanService = "net.connman";
 struct TechnologyProxy : public net::connman::Technology_proxy {
   explicit TechnologyProxy(sdbus::IProxy& p)
       : net::connman::Technology_proxy(p) {}
-  void onPropertyChanged(const std::string&,
-                         const sdbus::Variant&) override {}
+  void onPropertyChanged(const std::string&, const sdbus::Variant&) override {}
 };
 
 // ── Dart posting ─────────────────────────────────────────────────────────────
@@ -34,10 +33,10 @@ void post_glaze(Dart_Port_DL port, uint8_t discriminator, const T& value) {
   buf.insert(buf.end(), payload.begin(), payload.end());
 
   Dart_CObject obj;
-  obj.type                           = Dart_CObject_kTypedData;
-  obj.value.as_typed_data.type       = Dart_TypedData_kUint8;
-  obj.value.as_typed_data.length     = static_cast<intptr_t>(buf.size());
-  obj.value.as_typed_data.values     = buf.data();
+  obj.type = Dart_CObject_kTypedData;
+  obj.value.as_typed_data.type = Dart_TypedData_kUint8;
+  obj.value.as_typed_data.length = static_cast<intptr_t>(buf.size());
+  obj.value.as_typed_data.values = buf.data();
   Dart_PostCObject_DL(port, &obj);
 }
 
@@ -52,7 +51,8 @@ void post_error(Dart_Port_DL port,
              ConnmanError{object_path, e.getName(), e.getMessage()});
 }
 
-// ── One-shot proxy helper ─────────────────────────────────────────────────────
+// ── One-shot proxy helper
+// ─────────────────────────────────────────────────────
 
 // Creates its own system bus connection so the thread is fully self-contained.
 // object_path and result_port are copied by value — safe to capture in a
@@ -62,17 +62,16 @@ void dispatch(std::string object_path, Dart_Port_DL result_port, Func&& func) {
   std::thread([object_path = std::move(object_path), result_port,
                func = std::forward<Func>(func)]() {
     try {
-      auto conn  = sdbus::createSystemBusConnection();
-      auto proxy = sdbus::createProxy(
-          *conn,
-          sdbus::ServiceName{kConnmanService},
-          sdbus::ObjectPath{object_path});
+      auto conn = sdbus::createSystemBusConnection();
+      auto proxy =
+          sdbus::createProxy(*conn, sdbus::ServiceName{kConnmanService},
+                             sdbus::ObjectPath{object_path});
       TechnologyProxy tech(*proxy);
       func(tech);
       post_success(result_port, object_path);
     } catch (const sdbus::Error& e) {
-      std::cerr << "TechnologyBridge (" << object_path << "): "
-                << e.getName() << " — " << e.getMessage() << "\n";
+      std::cerr << "TechnologyBridge (" << object_path << "): " << e.getName()
+                << " — " << e.getMessage() << "\n";
       post_error(result_port, object_path, e);
     }
   }).detach();

@@ -24,15 +24,14 @@
 
 // Base struct to guarantee sdbus::IProxy initializes before Manager_proxy.
 struct ConnmanManagerProxyHolder {
-  static constexpr auto kService     = "net.connman";
+  static constexpr auto kService = "net.connman";
   static constexpr auto kManagerPath = "/";
 
   std::unique_ptr<sdbus::IProxy> proxy_;
   explicit ConnmanManagerProxyHolder(sdbus::IConnection& conn)
-      : proxy_(sdbus::createProxy(
-            conn,
-            sdbus::ServiceName{kService},
-            sdbus::ObjectPath{kManagerPath})) {}
+      : proxy_(sdbus::createProxy(conn,
+                                  sdbus::ServiceName{kService},
+                                  sdbus::ObjectPath{kManagerPath})) {}
 };
 
 class ConnmanManager : private ConnmanManagerProxyHolder,
@@ -64,7 +63,8 @@ class ConnmanManager : private ConnmanManagerProxyHolder,
 
   // Safe property accessors (return default on missing/type-mismatch).
   template <typename T>
-  static T get_prop(const PropertiesMap& props, const std::string& key,
+  static T get_prop(const PropertiesMap& props,
+                    const std::string& key,
                     const T& fallback = {});
 
  protected:
@@ -79,15 +79,15 @@ class ConnmanManager : private ConnmanManagerProxyHolder,
   void onTechnologyRemoved(const sdbus::ObjectPath& path) override;
 
   void onServicesChanged(
-      const std::vector<
-          sdbus::Struct<sdbus::ObjectPath,
-                        std::map<std::string, sdbus::Variant>>>& changed,
+      const std::vector<sdbus::Struct<sdbus::ObjectPath,
+                                      std::map<std::string, sdbus::Variant>>>&
+          changed,
       const std::vector<sdbus::ObjectPath>& removed) override;
 
   void onPeersChanged(
-      const std::vector<
-          sdbus::Struct<sdbus::ObjectPath,
-                        std::map<std::string, sdbus::Variant>>>& changed,
+      const std::vector<sdbus::Struct<sdbus::ObjectPath,
+                                      std::map<std::string, sdbus::Variant>>>&
+          changed,
       const std::vector<sdbus::ObjectPath>& removed) override {}
 
   void onTetheringClientsChanged(

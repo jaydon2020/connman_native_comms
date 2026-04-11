@@ -18,8 +18,7 @@ static constexpr auto kConnmanService = "net.connman";
 // Minimal concrete proxy — signals are unused for one-shot operations.
 struct ServiceProxy : public net::connman::Service_proxy {
   explicit ServiceProxy(sdbus::IProxy& p) : net::connman::Service_proxy(p) {}
-  void onPropertyChanged(const std::string&,
-                         const sdbus::Variant&) override {}
+  void onPropertyChanged(const std::string&, const sdbus::Variant&) override {}
 };
 
 // ── Dart posting ─────────────────────────────────────────────────────────────
@@ -34,8 +33,8 @@ void post_glaze(Dart_Port_DL port, uint8_t discriminator, const T& value) {
   buf.insert(buf.end(), payload.begin(), payload.end());
 
   Dart_CObject obj;
-  obj.type                       = Dart_CObject_kTypedData;
-  obj.value.as_typed_data.type   = Dart_TypedData_kUint8;
+  obj.type = Dart_CObject_kTypedData;
+  obj.value.as_typed_data.type = Dart_TypedData_kUint8;
   obj.value.as_typed_data.length = static_cast<intptr_t>(buf.size());
   obj.value.as_typed_data.values = buf.data();
   Dart_PostCObject_DL(port, &obj);
@@ -52,24 +51,24 @@ void post_error(Dart_Port_DL port,
              ConnmanError{object_path, e.getName(), e.getMessage()});
 }
 
-// ── One-shot proxy helper ─────────────────────────────────────────────────────
+// ── One-shot proxy helper
+// ─────────────────────────────────────────────────────
 
 template <typename Func>
 void dispatch(std::string object_path, Dart_Port_DL result_port, Func&& func) {
   std::thread([object_path = std::move(object_path), result_port,
                func = std::forward<Func>(func)]() {
     try {
-      auto conn  = sdbus::createSystemBusConnection();
-      auto proxy = sdbus::createProxy(
-          *conn,
-          sdbus::ServiceName{kConnmanService},
-          sdbus::ObjectPath{object_path});
+      auto conn = sdbus::createSystemBusConnection();
+      auto proxy =
+          sdbus::createProxy(*conn, sdbus::ServiceName{kConnmanService},
+                             sdbus::ObjectPath{object_path});
       ServiceProxy svc(*proxy);
       func(svc);
       post_success(result_port, object_path);
     } catch (const sdbus::Error& e) {
-      std::cerr << "ServiceBridge (" << object_path << "): "
-                << e.getName() << " — " << e.getMessage() << "\n";
+      std::cerr << "ServiceBridge (" << object_path << "): " << e.getName()
+                << " — " << e.getMessage() << "\n";
       post_error(result_port, object_path, e);
     }
   }).detach();
