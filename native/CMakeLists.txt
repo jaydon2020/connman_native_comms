@@ -3,6 +3,7 @@ project(connman_nc CXX C)
 
 set(CMAKE_CXX_STANDARD  23)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # ── sdbus-cpp v2 as submodule ────────────────────────────────────────────────
@@ -19,20 +20,21 @@ target_include_directories(dart_api_dl PUBLIC include)
 add_library(connman_types INTERFACE)
 target_include_directories(connman_types INTERFACE include)
 
-# ── Connman Manager library ───────────────────────────────────────────────────
-add_library(connman_manager STATIC
+# ── Connman Native Comms shared library ──────────────────────────────────────
+add_library(connman_nc SHARED
+    src/connman_bridge.cpp
     src/connman_manager.cpp
     src/technology_bridge.cpp
     src/service_bridge.cpp
     $<TARGET_OBJECTS:dart_api_dl>
 )
 
-target_include_directories(connman_manager
+target_include_directories(connman_nc
     PUBLIC include
     PUBLIC generated
 )
 
-target_link_libraries(connman_manager PUBLIC sdbus-c++ pthread)
+target_link_libraries(connman_nc PUBLIC sdbus-c++ pthread)
 
 if(BUILD_TESTING)
     enable_testing()
