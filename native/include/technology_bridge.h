@@ -12,9 +12,10 @@
 #include "dart_api_dl.h"
 
 class TechnologyBridge {
- public:
+ private:
   static constexpr auto kTechnologyIface = "net.connman.Technology";
 
+ public:
   // Set the "Powered" property on the given technology object.
   static void set_powered(const std::string& object_path,
                           bool powered,

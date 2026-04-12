@@ -12,9 +12,10 @@
 #include "dart_api_dl.h"
 
 class ServiceBridge {
- public:
+ private:
   static constexpr auto kServiceIface = "net.connman.Service";
 
+ public:
   // Associate with the network and obtain an IP address.
   static void connect(const std::string& object_path, Dart_Port_DL result_port);
 
