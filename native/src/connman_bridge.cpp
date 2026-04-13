@@ -47,15 +47,14 @@ struct BridgeContext {
   }
 };
 
-// ── C ABI Exports ───────────────────────────────────────────────────────────
+// ── C++ ABI Exports ─────────────────────────────────────────────────────────
 
-intptr_t connman_bridge_init(void* dart_api_data) {
-  return Dart_InitializeApiDL(dart_api_data);
-}
-
-void* connman_client_create(int64_t events_port) {
-  auto* ctx = new BridgeContext(events_port);
-  return ctx;
+void* connman_client_create(void* dart_api_data, int64_t events_port) {
+  if (Dart_InitializeApiDL(dart_api_data) != 0) {
+    std::cerr << "connman_native_comms: Dart_InitializeApiDL failed\n";
+    return nullptr;
+  }
+  return new BridgeContext(events_port);
 }
 
 void connman_client_destroy(void* client) {

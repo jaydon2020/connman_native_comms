@@ -21,7 +21,7 @@ struct ServiceProxy : public net::connman::Service_proxy {
   void onPropertyChanged(const std::string&, const sdbus::Variant&) override {}
 };
 
-// ── Dart posting ─────────────────────────────────────────────────────────────
+// ── Dart posting ──────────────────────────────────────────────────────────────
 
 template <typename T>
 void post_glaze(Dart_Port_DL port, uint8_t discriminator, const T& value) {
@@ -51,8 +51,7 @@ void post_error(Dart_Port_DL port,
              ConnmanError{object_path, e.getName(), e.getMessage()});
 }
 
-// ── One-shot proxy helper
-// ─────────────────────────────────────────────────────
+// ── One-shot proxy helper ─────────────────────────────────────────────────────
 
 template <typename Func>
 void dispatch(std::string object_path, Dart_Port_DL result_port, Func&& func) {

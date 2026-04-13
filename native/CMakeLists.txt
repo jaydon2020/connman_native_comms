@@ -36,6 +36,11 @@ target_include_directories(connman_nc
 
 target_link_libraries(connman_nc PUBLIC sdbus-c++ pthread)
 
+set_target_properties(connman_nc PROPERTIES
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN ON
+)
+
 if(BUILD_TESTING)
     enable_testing()
     add_subdirectory(test)

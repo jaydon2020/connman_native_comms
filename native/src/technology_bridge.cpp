@@ -21,7 +21,7 @@ struct TechnologyProxy : public net::connman::Technology_proxy {
   void onPropertyChanged(const std::string&, const sdbus::Variant&) override {}
 };
 
-// ── Dart posting ─────────────────────────────────────────────────────────────
+// ── Dart posting ──────────────────────────────────────────────────────────────
 
 template <typename T>
 void post_glaze(Dart_Port_DL port, uint8_t discriminator, const T& value) {
@@ -51,8 +51,7 @@ void post_error(Dart_Port_DL port,
              ConnmanError{object_path, e.getName(), e.getMessage()});
 }
 
-// ── One-shot proxy helper
-// ─────────────────────────────────────────────────────
+// ── One-shot proxy helper ─────────────────────────────────────────────────────
 
 // Creates its own system bus connection so the thread is fully self-contained.
 // object_path and result_port are copied by value — safe to capture in a
