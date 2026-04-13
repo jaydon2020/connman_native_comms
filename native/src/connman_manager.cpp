@@ -56,13 +56,18 @@ void ConnmanManager::get_managed_objects() {
   technologies_ = std::move(new_technologies);
   services_ = std::move(new_services);
 
-  post_glaze(kManagerProps, mgr_props);
   for (const auto& [path, tech] : technologies_) {
     post_glaze(kTechnologyProps, tech);
   }
   for (const auto& [path, svc] : services_) {
     post_glaze(kServiceProps, svc);
   }
+  // Post kManagerProps last so it acts as the "snapshot complete" sentinel.
+  // The Dart side awaits this message before returning from connect(); posting
+  // it after all kTechnologyProps / kServiceProps messages guarantees that the
+  // ReceivePort has already queued the full initial state before connect()
+  // unblocks and the caller accesses client.technologies / client.services.
+  post_glaze(kManagerProps, mgr_props);
 }
 
 // ── Property extraction ─────────────────────────────────────────────────────
