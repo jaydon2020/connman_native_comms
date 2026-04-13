@@ -1,3 +1,6 @@
+// service.dart — ConnmanService wrapper holding live D-Bus state.
+// Properties are updated in-place via updateProperties() on signal delivery.
+
 import 'client.dart';
 import 'ffi/types.dart';
 

@@ -1,3 +1,6 @@
+// types.dart — Dart-side struct mirrors for glaze-decoded ConnMan payloads.
+// These match the C++ structs in native/include/connman_types.h.
+
 abstract final class MsgTypes {
   static const int kManagerProps = 0x01;
   static const int kTechnologyProps = 0x02;
@@ -15,10 +18,10 @@ class ConnmanManagerProps {
   final bool offlineMode;
   final bool sessionMode;
 
-  ConnmanManagerProps({
-    required this.state,
-    required this.offlineMode,
-    required this.sessionMode,
+  const ConnmanManagerProps({
+    this.state = '',
+    this.offlineMode = false,
+    this.sessionMode = false,
   });
 }
 
@@ -32,15 +35,15 @@ class ConnmanTechnologyProps {
   final String tetheringIdentifier;
   final String tetheringPassphrase;
 
-  ConnmanTechnologyProps({
-    required this.objectPath,
-    required this.name,
-    required this.type,
-    required this.powered,
-    required this.connected,
-    required this.tethering,
-    required this.tetheringIdentifier,
-    required this.tetheringPassphrase,
+  const ConnmanTechnologyProps({
+    this.objectPath = '',
+    this.name = '',
+    this.type = '',
+    this.powered = false,
+    this.connected = false,
+    this.tethering = false,
+    this.tetheringIdentifier = '',
+    this.tetheringPassphrase = '',
   });
 }
 
@@ -58,30 +61,30 @@ class ConnmanServiceProps {
   final List<String> nameservers;
   final List<String> domains;
 
-  ConnmanServiceProps({
-    required this.objectPath,
-    required this.name,
-    required this.state,
-    required this.type,
-    required this.strength,
-    required this.favorite,
-    required this.immutable,
-    required this.autoConnect,
-    required this.roaming,
-    required this.security,
-    required this.nameservers,
-    required this.domains,
+  const ConnmanServiceProps({
+    this.objectPath = '',
+    this.name = '',
+    this.state = '',
+    this.type = '',
+    this.strength = 0,
+    this.favorite = false,
+    this.immutable = false,
+    this.autoConnect = false,
+    this.roaming = false,
+    this.security = const [],
+    this.nameservers = const [],
+    this.domains = const [],
   });
 }
 
 class ConnmanObjectRemoved {
   final String objectPath;
-  ConnmanObjectRemoved({required this.objectPath});
+  const ConnmanObjectRemoved({this.objectPath = ''});
 }
 
 class ConnmanMethodSuccess {
   final String objectPath;
-  ConnmanMethodSuccess({required this.objectPath});
+  const ConnmanMethodSuccess({this.objectPath = ''});
 }
 
 class ConnmanError {
@@ -89,9 +92,9 @@ class ConnmanError {
   final String name;
   final String message;
 
-  ConnmanError({
-    required this.objectPath,
-    required this.name,
-    required this.message,
+  const ConnmanError({
+    this.objectPath = '',
+    this.name = '',
+    this.message = '',
   });
 }
