@@ -1,3 +1,7 @@
+// client.dart — high-level ConnMan client backed by the native FFI bridge.
+// Owns the event ReceivePort, routes discriminator-tagged messages from C++,
+// and exposes typed streams and async methods to callers.
+
 import 'dart:async';
 import 'dart:ffi';
 import 'dart:isolate';
@@ -12,7 +16,6 @@ import 'service.dart';
 import 'technology.dart';
 
 class ConnmanClient {
-  static bool _initialized = false;
   Pointer<Void>? _client;
   final ReceivePort _eventsPort;
 
@@ -43,15 +46,6 @@ class ConnmanClient {
   ConnmanClient._(this._eventsPort);
 
   static Future<ConnmanClient> connect() async {
-    if (!_initialized) {
-      final res = ConnmanBindings.init(NativeApi.initializeApiDLData);
-      if (res != 0) {
-        throw StateError(
-            'Failed to initialize Dart API DL in connman_bridge.');
-      }
-      _initialized = true;
-    }
-
     final eventsPort = ReceivePort();
     final client = ConnmanClient._(eventsPort);
 
@@ -61,12 +55,13 @@ class ConnmanClient {
     // posted during get_managed_objects() are missed.
     eventsPort.listen(client._handleMessage);
 
-    client._client =
-        ConnmanBindings.createClient(eventsPort.sendPort.nativePort);
+    client._client = ConnmanBindings.createClient(
+        NativeApi.initializeApiDLData, eventsPort.sendPort.nativePort);
     if (client._client == nullptr) {
       eventsPort.close();
       throw StateError(
-          'Failed to create native ConnmanClient. Check if D-Bus is available.');
+          'Failed to create native ConnmanClient. '
+          'Check D-Bus availability and Dart API DL initialization.');
     }
 
     // Block until the initial snapshot is delivered (first kManagerProps).
@@ -118,7 +113,7 @@ class ConnmanClient {
     if (message.isEmpty) return;
 
     final discriminator = message[0];
-    final payload = GlazeCodec(message.sublist(1)).decodePayload(discriminator);
+    final payload = GlazeCodec.decodePayload(message);
 
     switch (discriminator) {
       case MsgTypes.kManagerProps:
@@ -232,55 +227,73 @@ class ConnmanClient {
 
   Future<void> technologySetPowered(String objectPath, bool powered) {
     return _dispatch(objectPath, () {
-      final cPath = objectPath.toNativeUtf8();
-      ConnmanBindings.techSetPowered(
-          _client!, cPath, powered, _eventsPort.sendPort.nativePort);
-      malloc.free(cPath);
+      final cPath = objectPath.toNativeUtf8(allocator: calloc);
+      try {
+        ConnmanBindings.techSetPowered(
+            _client!, cPath, powered, _eventsPort.sendPort.nativePort);
+      } finally {
+        calloc.free(cPath);
+      }
     });
   }
 
   Future<void> technologyScan(String objectPath) {
     return _dispatch(objectPath, () {
-      final cPath = objectPath.toNativeUtf8();
-      ConnmanBindings.techScan(
-          _client!, cPath, _eventsPort.sendPort.nativePort);
-      malloc.free(cPath);
+      final cPath = objectPath.toNativeUtf8(allocator: calloc);
+      try {
+        ConnmanBindings.techScan(
+            _client!, cPath, _eventsPort.sendPort.nativePort);
+      } finally {
+        calloc.free(cPath);
+      }
     });
   }
 
   Future<void> serviceConnect(String objectPath) {
     return _dispatch(objectPath, () {
-      final cPath = objectPath.toNativeUtf8();
-      ConnmanBindings.serviceConnect(
-          _client!, cPath, _eventsPort.sendPort.nativePort);
-      malloc.free(cPath);
+      final cPath = objectPath.toNativeUtf8(allocator: calloc);
+      try {
+        ConnmanBindings.serviceConnect(
+            _client!, cPath, _eventsPort.sendPort.nativePort);
+      } finally {
+        calloc.free(cPath);
+      }
     });
   }
 
   Future<void> serviceDisconnect(String objectPath) {
     return _dispatch(objectPath, () {
-      final cPath = objectPath.toNativeUtf8();
-      ConnmanBindings.serviceDisconnect(
-          _client!, cPath, _eventsPort.sendPort.nativePort);
-      malloc.free(cPath);
+      final cPath = objectPath.toNativeUtf8(allocator: calloc);
+      try {
+        ConnmanBindings.serviceDisconnect(
+            _client!, cPath, _eventsPort.sendPort.nativePort);
+      } finally {
+        calloc.free(cPath);
+      }
     });
   }
 
   Future<void> serviceRemove(String objectPath) {
     return _dispatch(objectPath, () {
-      final cPath = objectPath.toNativeUtf8();
-      ConnmanBindings.serviceRemove(
-          _client!, cPath, _eventsPort.sendPort.nativePort);
-      malloc.free(cPath);
+      final cPath = objectPath.toNativeUtf8(allocator: calloc);
+      try {
+        ConnmanBindings.serviceRemove(
+            _client!, cPath, _eventsPort.sendPort.nativePort);
+      } finally {
+        calloc.free(cPath);
+      }
     });
   }
 
   Future<void> serviceSetAutoConnect(String objectPath, bool autoConnect) {
     return _dispatch(objectPath, () {
-      final cPath = objectPath.toNativeUtf8();
-      ConnmanBindings.serviceSetAutoConnect(
-          _client!, cPath, autoConnect, _eventsPort.sendPort.nativePort);
-      malloc.free(cPath);
+      final cPath = objectPath.toNativeUtf8(allocator: calloc);
+      try {
+        ConnmanBindings.serviceSetAutoConnect(
+            _client!, cPath, autoConnect, _eventsPort.sendPort.nativePort);
+      } finally {
+        calloc.free(cPath);
+      }
     });
   }
 
@@ -292,20 +305,21 @@ class ConnmanClient {
     required String gateway,
   }) {
     return _dispatch(objectPath, () {
-      final cPath = objectPath.toNativeUtf8();
-      final cMethod = method.toNativeUtf8();
-      final cAddress = address.toNativeUtf8();
-      final cNetmask = netmask.toNativeUtf8();
-      final cGateway = gateway.toNativeUtf8();
-
-      ConnmanBindings.serviceSetIpv4Config(_client!, cPath, cMethod, cAddress,
-          cNetmask, cGateway, _eventsPort.sendPort.nativePort);
-
-      malloc.free(cPath);
-      malloc.free(cMethod);
-      malloc.free(cAddress);
-      malloc.free(cNetmask);
-      malloc.free(cGateway);
+      final cPath = objectPath.toNativeUtf8(allocator: calloc);
+      final cMethod = method.toNativeUtf8(allocator: calloc);
+      final cAddress = address.toNativeUtf8(allocator: calloc);
+      final cNetmask = netmask.toNativeUtf8(allocator: calloc);
+      final cGateway = gateway.toNativeUtf8(allocator: calloc);
+      try {
+        ConnmanBindings.serviceSetIpv4Config(_client!, cPath, cMethod, cAddress,
+            cNetmask, cGateway, _eventsPort.sendPort.nativePort);
+      } finally {
+        calloc.free(cPath);
+        calloc.free(cMethod);
+        calloc.free(cAddress);
+        calloc.free(cNetmask);
+        calloc.free(cGateway);
+      }
     });
   }
 }
