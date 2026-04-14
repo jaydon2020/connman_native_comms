@@ -20,58 +20,86 @@ class ServiceScreen extends StatefulWidget {
 }
 
 class _ServiceScreenState extends State<ServiceScreen> {
-  bool _connecting = false;
+  // True while a connect() D-Bus call is in-flight (before ConnMan acks it).
+  // After ack, _svc.state drives the UI (association → configuration → online).
+  bool _awaitingConnectAck = false;
+
+  // Set to true when the user taps Disconnect so that going idle doesn't
+  // pop the screen unexpectedly (we stay to let the user reconnect).
+  bool _userInitiatedDisconnect = false;
+
   StreamSubscription<ConnmanService>? _changedSub;
   StreamSubscription<ConnmanTechnology>? _techSub;
 
   ConnmanService get _svc => widget.service;
 
+  // Derived state — reads from the live mutated object.
+  bool get _isConnected => _svc.state == 'online' || _svc.state == 'ready';
+  bool get _isConnecting =>
+      _awaitingConnectAck ||
+      _svc.state == 'association' ||
+      _svc.state == 'configuration';
+  bool get _isFailed => _svc.state == 'failure';
+
   @override
   void initState() {
     super.initState();
-    // Keep the UI in sync with live state updates.
     _changedSub = widget.client.serviceChanged.listen(_onServiceChanged);
-    // Pop back if WiFi is powered off.
     _techSub = widget.client.technologyChanged.listen(_onTechChanged);
   }
 
   void _onServiceChanged(ConnmanService svc) {
-    if (!mounted) return;
-    if (svc.objectPath != _svc.objectPath) return;
-    if (svc.state == 'idle' && _svc.state != 'idle') {
-      // Service disconnected — pop back to scanner.
-      Navigator.of(context).popUntil((route) => route.isFirst);
-      return;
+    if (!mounted || svc.objectPath != _svc.objectPath) return;
+
+    // Once ConnMan acks a terminal state, clear the "awaiting ack" spinner.
+    const terminalStates = {'online', 'ready', 'idle', 'failure', 'disconnect'};
+    if (terminalStates.contains(svc.state)) {
+      _awaitingConnectAck = false;
     }
+
     setState(() {});
   }
 
   void _onTechChanged(ConnmanTechnology tech) {
-    if (!mounted) return;
-    if (tech.type == 'wifi' && !tech.powered) {
-      // Technology powered off — pop back to scanner.
+    if (!mounted || tech.type != 'wifi') return;
+    if (!tech.powered) {
+      // WiFi powered off — go back to root.
       Navigator.of(context).popUntil((route) => route.isFirst);
-      return;
     }
   }
 
   Future<void> _connect() async {
-    setState(() => _connecting = true);
+    if (_isConnecting || _isConnected) return;
+    setState(() { _awaitingConnectAck = true; _userInitiatedDisconnect = false; });
     try {
       await _svc.connect();
+      // Do NOT clear _awaitingConnectAck here — let _onServiceChanged do it
+      // when ConnMan reports a terminal state (online/ready/failure/idle).
     } on ConnmanException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Connect failed: ${e.message}')),
-        );
+        setState(() => _awaitingConnectAck = false);
+        _showSnackBar('Connect failed: ${e.message}');
       }
     }
-    if (mounted) setState(() => _connecting = false);
   }
 
   Future<void> _disconnect() async {
-    await _svc.disconnect();
-    // _onServiceChanged will pop back when state becomes idle.
+    if (_isConnecting) return; // don't interrupt an in-progress connect
+    setState(() => _userInitiatedDisconnect = true);
+    try {
+      await _svc.disconnect();
+    } on ConnmanException catch (e) {
+      if (mounted) {
+        setState(() => _userInitiatedDisconnect = false);
+        _showSnackBar('Disconnect failed: ${e.message}');
+      }
+    }
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -81,88 +109,208 @@ class _ServiceScreenState extends State<ServiceScreen> {
     super.dispose();
   }
 
-  bool get _isConnected =>
-      _svc.state == 'online' || _svc.state == 'ready';
-
   @override
   Widget build(BuildContext context) {
+    final name = _svc.name.isNotEmpty ? _svc.name : '(hidden)';
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(_svc.name.isNotEmpty ? _svc.name : '(hidden)'),
-        actions: [
-          if (_connecting)
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            )
-          else
-            TextButton(
-              onPressed: _isConnected ? _disconnect : _connect,
-              child: Text(_isConnected ? 'Disconnect' : 'Connect'),
-            ),
-        ],
+        title: Text(name),
+        actions: [_buildActionButton()],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _PropertyTile('State', _svc.state),
-          _PropertyTile('Type', _svc.type),
-          _PropertyTile('Strength', '${_svc.strength}'),
-          _PropertyTile('Security', _svc.security.join(', ')),
-          _PropertyTile('Favorite', '${_svc.favorite}'),
-          _PropertyTile('AutoConnect', '${_svc.autoConnect}'),
-          _PropertyTile('Roaming', '${_svc.roaming}'),
-          _PropertyTile('Nameservers', _svc.nameservers.join(', ')),
-          _PropertyTile('Domains', _svc.domains.join(', ')),
-          const Divider(height: 32),
-          ListTile(
-            leading: const Icon(Icons.settings_ethernet),
-            title: const Text('Technology Details'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () {
-              final wifi = widget.client.technologies
-                  .where((t) => t.type == 'wifi')
-                  .firstOrNull;
-              if (wifi != null) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute<void>(
-                    builder: (_) => TechnologyScreen(
-                        client: widget.client, technology: wifi),
-                  ),
-                );
-              }
-            },
-          ),
+          _buildStatusCard(),
+          const SizedBox(height: 12),
+          _buildPropertiesCard(),
+          const SizedBox(height: 12),
+          _buildTechnologyTile(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton() {
+    if (_isConnecting) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+    if (_isConnected) {
+      return TextButton(
+        onPressed: _disconnect,
+        child: const Text('Disconnect'),
+      );
+    }
+    return TextButton(
+      onPressed: _connect,
+      child: const Text('Connect'),
+    );
+  }
+
+  Widget _buildStatusCard() {
+    Color stateColor;
+    IconData stateIcon;
+    switch (_svc.state) {
+      case 'online':
+        stateColor = Colors.green;
+        stateIcon = Icons.check_circle;
+      case 'ready':
+        stateColor = Colors.lightGreen;
+        stateIcon = Icons.check_circle_outline;
+      case 'association':
+      case 'configuration':
+        stateColor = Colors.orange;
+        stateIcon = Icons.sync;
+      case 'failure':
+        stateColor = Colors.red;
+        stateIcon = Icons.error_outline;
+      default: // idle, disconnect
+        stateColor = Colors.grey;
+        stateIcon = Icons.radio_button_unchecked;
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(stateIcon, color: stateColor),
+                const SizedBox(width: 8),
+                Text(
+                  _isConnecting ? '${_svc.state}…' : _svc.state,
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(color: stateColor),
+                ),
+              ],
+            ),
+            // Show ConnMan error reason when the service has failed.
+            if (_isFailed && _svc.error.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.warning_amber, size: 16, color: Colors.red),
+                  const SizedBox(width: 4),
+                  Text(
+                    _svc.error,
+                    style: const TextStyle(color: Colors.red, fontSize: 13),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 8),
+            _StrengthBar(strength: _svc.strength),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPropertiesCard() {
+    return Card(
+      child: Column(
+        children: [
+          _PropertyTile('Security',
+              _svc.security.isNotEmpty ? _svc.security.join(', ') : 'open'),
+          _PropertyTile('Favorite', _svc.favorite ? 'Yes' : 'No'),
+          _PropertyTile('Auto-connect', _svc.autoConnect ? 'Yes' : 'No'),
+          _PropertyTile('Roaming', _svc.roaming ? 'Yes' : 'No'),
+          if (_svc.nameservers.isNotEmpty)
+            _PropertyTile('DNS', _svc.nameservers.join(', ')),
+          if (_svc.domains.isNotEmpty)
+            _PropertyTile('Domains', _svc.domains.join(', ')),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTechnologyTile() {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.settings_ethernet),
+        title: const Text('Technology Details'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () {
+          final wifi = widget.client.technologies
+              .where((t) => t.type == 'wifi')
+              .firstOrNull;
+          if (wifi == null) return;
+          Navigator.push(
+            context,
+            MaterialPageRoute<void>(
+              builder: (_) =>
+                  TechnologyScreen(client: widget.client, technology: wifi),
+            ),
+          );
+        },
       ),
     );
   }
 }
 
+// ── Strength bar ─────────────────────────────────────────────────────────────
+
+class _StrengthBar extends StatelessWidget {
+  final int strength;
+  const _StrengthBar({required this.strength});
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = (strength.clamp(0, 100) / 100.0);
+    final color = pct >= 0.7
+        ? Colors.green
+        : pct >= 0.4
+            ? Colors.orange
+            : Colors.red;
+    return Row(
+      children: [
+        const Icon(Icons.signal_wifi_4_bar, size: 16, color: Colors.grey),
+        const SizedBox(width: 8),
+        Expanded(
+          child: LinearProgressIndicator(
+            value: pct,
+            color: color,
+            backgroundColor: Colors.grey.shade200,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text('$strength%', style: const TextStyle(fontSize: 12)),
+      ],
+    );
+  }
+}
+
+// ── Property tile ─────────────────────────────────────────────────────────────
+
 class _PropertyTile extends StatelessWidget {
   final String label;
   final String value;
-
   const _PropertyTile(this.label, this.value);
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+            width: 110,
+            child: Text(label,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.grey.shade600,
+                    )),
           ),
           Expanded(child: Text(value)),
         ],
