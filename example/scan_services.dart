@@ -33,11 +33,8 @@ Future<void> main(List<String> args) async {
     await Future<void>.delayed(const Duration(milliseconds: 500));
   }
 
-  print('Scanning for ${timeout.inSeconds} seconds...\n');
-  await wifi.scan();
-
-  // Print each newly discovered service as it arrives.
-  final sub = client.serviceAdded.listen((service) {
+  // Subscribe before scanning so no results are missed.
+  void printService(ConnmanService service) {
     if (service.type != 'wifi') return;
     final name = service.name.isNotEmpty ? service.name : '(hidden)';
     final sec = service.security.isNotEmpty
@@ -45,10 +42,17 @@ Future<void> main(List<String> args) async {
         : '  [open]';
     print('strength: ${service.strength.toString().padLeft(3)}'
         '  $name$sec');
-  });
+  }
+
+  final subAdded = client.serviceAdded.listen(printService);
+  final subChanged = client.serviceChanged.listen(printService);
+
+  print('Scanning for ${timeout.inSeconds} seconds...\n');
+  await wifi.scan();
 
   await Future<void>.delayed(timeout);
-  await sub.cancel();
+  await subAdded.cancel();
+  await subChanged.cancel();
 
   // Summary: all known WiFi services sorted by signal strength.
   final wifiServices = client.services
