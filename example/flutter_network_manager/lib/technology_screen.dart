@@ -42,6 +42,11 @@ class _TechnologyScreenState extends State<TechnologyScreen> {
     // Technology property changes (Powered, Connected, Tethering, …).
     _techSub = widget.client.technologyChanged.listen((tech) {
       if (!mounted || tech.type != _tech.type) return;
+      // If the technology was powered off, go back to the technology list.
+      if (!tech.powered) {
+        Navigator.of(context).pop();
+        return;
+      }
       setState(() {});
     });
 
@@ -204,7 +209,7 @@ class _TechnologyScreenState extends State<TechnologyScreen> {
                     child: Text(
                       _tech.powered
                           ? 'No networks found. Tap Scan.'
-                          : 'WiFi is powered off.',
+                          : '${_tech.name.isNotEmpty ? _tech.name : _tech.type} is powered off.',
                       style: const TextStyle(color: Colors.grey),
                     ),
                   )

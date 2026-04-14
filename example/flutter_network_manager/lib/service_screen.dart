@@ -236,24 +236,23 @@ class _ServiceScreenState extends State<ServiceScreen> {
   }
 
   Widget _buildTechnologyTile() {
+    final tech = widget.client.technologies
+        .where((t) => t.type == _svc.type)
+        .firstOrNull;
+    if (tech == null) return const SizedBox.shrink();
+
     return Card(
       child: ListTile(
         leading: const Icon(Icons.settings_ethernet),
         title: const Text('Technology Details'),
         trailing: const Icon(Icons.chevron_right),
-        onTap: () {
-          final wifi = widget.client.technologies
-              .where((t) => t.type == 'wifi')
-              .firstOrNull;
-          if (wifi == null) return;
-          Navigator.push(
-            context,
-            MaterialPageRoute<void>(
-              builder: (_) =>
-                  TechnologyScreen(client: widget.client, technology: wifi),
-            ),
-          );
-        },
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute<void>(
+            builder: (_) =>
+                TechnologyScreen(client: widget.client, technology: tech),
+          ),
+        ),
       ),
     );
   }
