@@ -116,7 +116,21 @@ class ConnmanClient {
     if (message.isEmpty) return;
 
     final discriminator = message[0];
-    final payload = GlazeCodec.decodePayload(message);
+
+    // Guard against unknown discriminators (e.g. C++ is newer than Dart) or
+    // malformed payloads.  An unhandled throw here would propagate out of the
+    // ReceivePort listener and crash the isolate.
+    late Object payload;
+    try {
+      payload = GlazeCodec.decodePayload(message);
+    } catch (e, st) {
+      assert(
+        false,
+        'ConnmanClient: failed to decode message '
+        '0x${discriminator.toRadixString(16)}: $e\n$st',
+      );
+      return;
+    }
 
     switch (discriminator) {
       case MsgTypes.kManagerProps:
@@ -218,7 +232,7 @@ class ConnmanClient {
     }
     if (_pendingMethodCalls.containsKey(objectPath)) {
       return Future.error(
-          StateError('Operation already in progress for $objectPath'));
+          ConnmanInProgressException(objectPath, 'Operation already in progress'));
     }
     final completer = Completer<void>();
     _pendingMethodCalls[objectPath] = completer;
@@ -231,6 +245,9 @@ class ConnmanClient {
   Future<void> technologySetPowered(String objectPath, bool powered) {
     return _dispatch(objectPath, () {
       final cPath = objectPath.toNativeUtf8(allocator: calloc);
+      // NOTE: cPath is freed synchronously after the native call because the
+      // C ABI copies the string before returning.  Do not add any await inside
+      // this callback — that would free the pointer before C++ finishes reading.
       try {
         ConnmanBindings.techSetPowered(
             _client!, cPath, powered, _eventsPort!.sendPort.nativePort);

@@ -1,6 +1,8 @@
 // technology.dart — ConnmanTechnology wrapper holding live D-Bus state.
 // Properties are updated in-place via updateProperties() on signal delivery.
 
+import 'package:meta/meta.dart';
+
 import 'client.dart';
 import 'ffi/types.dart';
 
@@ -16,6 +18,7 @@ class ConnmanTechnology {
   String tetheringIdentifier;
   String tetheringPassphrase;
 
+  @internal
   ConnmanTechnology.internal(this.client, ConnmanTechnologyProps props)
       : objectPath = props.objectPath,
         name = props.name,

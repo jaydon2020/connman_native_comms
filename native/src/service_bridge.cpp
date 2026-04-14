@@ -3,7 +3,6 @@
 #include <iostream>
 #include <map>
 #include <string>
-#include <thread>
 #include <vector>
 
 #include <sdbus-c++/sdbus-c++.h>
@@ -19,6 +18,8 @@ static constexpr auto kConnmanService = "net.connman";
 struct ServiceProxy : public net::connman::Service_proxy {
   explicit ServiceProxy(sdbus::IProxy& p) : net::connman::Service_proxy(p) {}
   void onPropertyChanged(const std::string&, const sdbus::Variant&) override {}
+  // Note: registerProxy() is intentionally NOT called — signals are not needed
+  // for one-shot connect/disconnect/property operations.
 };
 
 // ── Dart posting ──────────────────────────────────────────────────────────────
@@ -51,16 +52,21 @@ void post_error(Dart_Port_DL port,
              ConnmanError{object_path, e.getName(), e.getMessage()});
 }
 
-// ── One-shot proxy helper ─────────────────────────────────────────────────────
+// ── Shared-connection dispatch ────────────────────────────────────────────────
 
 template <typename Func>
-void dispatch(std::string object_path, Dart_Port_DL result_port, Func&& func) {
-  std::thread([object_path = std::move(object_path), result_port,
-               func = std::forward<Func>(func)]() {
+void dispatch(sdbus::IConnection& conn,
+              WorkQueue& queue,
+              std::string object_path,
+              Dart_Port_DL result_port,
+              Func&& func) {
+  queue.enqueue([&conn,
+                 object_path = std::move(object_path),
+                 result_port,
+                 func = std::forward<Func>(func)]() mutable {
     try {
-      auto conn = sdbus::createSystemBusConnection();
       auto proxy =
-          sdbus::createProxy(*conn, sdbus::ServiceName{kConnmanService},
+          sdbus::createProxy(conn, sdbus::ServiceName{kConnmanService},
                              sdbus::ObjectPath{object_path});
       ServiceProxy svc(*proxy);
       func(svc);
@@ -70,41 +76,54 @@ void dispatch(std::string object_path, Dart_Port_DL result_port, Func&& func) {
                 << " — " << e.getMessage() << "\n";
       post_error(result_port, object_path, e);
     }
-  }).detach();
+  });
 }
 
 }  // namespace
 
-void ServiceBridge::connect(const std::string& object_path,
+void ServiceBridge::connect(sdbus::IConnection& conn,
+                            WorkQueue& queue,
+                            const std::string& object_path,
                             Dart_Port_DL result_port) {
-  dispatch(object_path, result_port, [](auto& svc) { svc.Connect(); });
+  dispatch(conn, queue, object_path, result_port,
+           [](auto& svc) { svc.Connect(); });
 }
 
-void ServiceBridge::disconnect(const std::string& object_path,
+void ServiceBridge::disconnect(sdbus::IConnection& conn,
+                               WorkQueue& queue,
+                               const std::string& object_path,
                                Dart_Port_DL result_port) {
-  dispatch(object_path, result_port, [](auto& svc) { svc.Disconnect(); });
+  dispatch(conn, queue, object_path, result_port,
+           [](auto& svc) { svc.Disconnect(); });
 }
 
-void ServiceBridge::remove(const std::string& object_path,
+void ServiceBridge::remove(sdbus::IConnection& conn,
+                           WorkQueue& queue,
+                           const std::string& object_path,
                            Dart_Port_DL result_port) {
-  dispatch(object_path, result_port, [](auto& svc) { svc.Remove(); });
+  dispatch(conn, queue, object_path, result_port,
+           [](auto& svc) { svc.Remove(); });
 }
 
-void ServiceBridge::set_auto_connect(const std::string& object_path,
+void ServiceBridge::set_auto_connect(sdbus::IConnection& conn,
+                                     WorkQueue& queue,
+                                     const std::string& object_path,
                                      bool auto_connect,
                                      Dart_Port_DL result_port) {
-  dispatch(object_path, result_port, [auto_connect](auto& svc) {
+  dispatch(conn, queue, object_path, result_port, [auto_connect](auto& svc) {
     svc.SetProperty("AutoConnect", sdbus::Variant{auto_connect});
   });
 }
 
-void ServiceBridge::set_ipv4_config(const std::string& object_path,
+void ServiceBridge::set_ipv4_config(sdbus::IConnection& conn,
+                                    WorkQueue& queue,
+                                    const std::string& object_path,
                                     const std::string& method,
                                     const std::string& address,
                                     const std::string& netmask,
                                     const std::string& gateway,
                                     Dart_Port_DL result_port) {
-  dispatch(object_path, result_port,
+  dispatch(conn, queue, object_path, result_port,
            [method, address, netmask, gateway](auto& svc) {
              std::map<std::string, sdbus::Variant> config;
              config["Method"] = sdbus::Variant{method};

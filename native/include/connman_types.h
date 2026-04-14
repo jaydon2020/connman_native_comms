@@ -77,6 +77,11 @@ struct glz::meta<ConnmanTechnologyProps> {
 };
 
 // ── Service properties ──────────────────────────────────────────────────────
+//
+// FIELD ORDER CONTRACT: glaze_meta.h serialises fields in the exact order
+// listed in glz::meta<T>::fields below.  The Dart codec (lib/src/ffi/codec.dart
+// _decodeServiceProps) reads them in the same order.  Always add new fields at
+// the END of both lists together, or the binary stream will be misinterpreted.
 
 struct ConnmanServiceProps {
   std::string objectPath;  // e.g. "/net/connman/service/wifi_xyz"
@@ -91,6 +96,7 @@ struct ConnmanServiceProps {
   std::vector<std::string> security;
   std::vector<std::string> nameservers;
   std::vector<std::string> domains;
+  std::string error;  // ConnMan "Error" property: "dhcp-failed", "connect-failed", "" if none
 };
 template <>
 struct glz::meta<ConnmanServiceProps> {
@@ -106,7 +112,8 @@ struct glz::meta<ConnmanServiceProps> {
       glz::field("roaming", &ConnmanServiceProps::roaming),
       glz::field("security", &ConnmanServiceProps::security),
       glz::field("nameservers", &ConnmanServiceProps::nameservers),
-      glz::field("domains", &ConnmanServiceProps::domains));
+      glz::field("domains", &ConnmanServiceProps::domains),
+      glz::field("error", &ConnmanServiceProps::error));
 };
 
 // ── Removed signal payload ──────────────────────────────────────────────────
