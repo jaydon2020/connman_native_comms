@@ -47,6 +47,8 @@ class ConnmanTechnologyProps {
   });
 }
 
+// FIELD ORDER CONTRACT: fields must match glz::meta<ConnmanServiceProps>::fields
+// in native/include/connman_types.h exactly.  Add new fields at the END of both.
 class ConnmanServiceProps {
   final String objectPath;
   final String name;
@@ -60,6 +62,7 @@ class ConnmanServiceProps {
   final List<String> security;
   final List<String> nameservers;
   final List<String> domains;
+  final String error; // ConnMan "Error" property: "dhcp-failed", "" if none
 
   const ConnmanServiceProps({
     this.objectPath = '',
@@ -74,6 +77,7 @@ class ConnmanServiceProps {
     this.security = const [],
     this.nameservers = const [],
     this.domains = const [],
+    this.error = '',
   });
 }
 

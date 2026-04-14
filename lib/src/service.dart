@@ -1,6 +1,8 @@
 // service.dart — ConnmanService wrapper holding live D-Bus state.
 // Properties are updated in-place via updateProperties() on signal delivery.
 
+import 'package:meta/meta.dart';
+
 import 'client.dart';
 import 'ffi/types.dart';
 
@@ -20,7 +22,10 @@ class ConnmanService {
   List<String> security;
   List<String> nameservers;
   List<String> domains;
+  /// ConnMan "Error" property: "dhcp-failed", "connect-failed", "" when clean.
+  String error;
 
+  @internal
   ConnmanService.internal(this.client, ConnmanServiceProps props)
       : objectPath = props.objectPath,
         name = props.name,
@@ -33,7 +38,8 @@ class ConnmanService {
         roaming = props.roaming,
         security = List.unmodifiable(props.security),
         nameservers = List.unmodifiable(props.nameservers),
-        domains = List.unmodifiable(props.domains);
+        domains = List.unmodifiable(props.domains),
+        error = props.error;
 
   // INTERNAL use: updates cached properties on live D-Bus signal.
   void updateProperties(ConnmanServiceProps props) {
@@ -48,6 +54,7 @@ class ConnmanService {
     security = List.unmodifiable(props.security);
     nameservers = List.unmodifiable(props.nameservers);
     domains = List.unmodifiable(props.domains);
+    error = props.error;
   }
 
   Future<void> connect() async {
@@ -72,6 +79,14 @@ class ConnmanService {
     String netmask = '',
     String gateway = '',
   }) async {
+    // address/netmask/gateway are only meaningful for "manual"; ConnMan
+    // ignores extra keys for "dhcp"/"off", but callers should not pass them
+    // to avoid confusion about what took effect.
+    assert(
+      method == 'manual' || (address.isEmpty && netmask.isEmpty && gateway.isEmpty),
+      'setIpv4Config: address/netmask/gateway are only used when method is "manual". '
+      'Got method="$method" with non-empty address/netmask/gateway.',
+    );
     await client.serviceSetIpv4Config(
       objectPath: objectPath,
       method: method,

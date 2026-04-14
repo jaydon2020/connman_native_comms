@@ -2,7 +2,6 @@
 
 #include <iostream>
 #include <string>
-#include <thread>
 #include <vector>
 
 #include <sdbus-c++/sdbus-c++.h>
@@ -19,6 +18,8 @@ struct TechnologyProxy : public net::connman::Technology_proxy {
   explicit TechnologyProxy(sdbus::IProxy& p)
       : net::connman::Technology_proxy(p) {}
   void onPropertyChanged(const std::string&, const sdbus::Variant&) override {}
+  // Note: registerProxy() is intentionally NOT called — signals are not needed
+  // for one-shot set/scan operations.
 };
 
 // ── Dart posting ──────────────────────────────────────────────────────────────
@@ -51,19 +52,27 @@ void post_error(Dart_Port_DL port,
              ConnmanError{object_path, e.getName(), e.getMessage()});
 }
 
-// ── One-shot proxy helper ─────────────────────────────────────────────────────
+// ── Shared-connection dispatch ────────────────────────────────────────────────
+//
+// Enqueues a task on the WorkQueue.  The task creates a short-lived proxy on
+// the shared worker connection (conn), calls the D-Bus method, and posts the
+// result.  conn is captured by reference — it is guaranteed to outlive all
+// queued tasks because WorkQueue::~WorkQueue() joins the worker thread before
+// BridgeContext destroys worker_conn.
 
-// Creates its own system bus connection so the thread is fully self-contained.
-// object_path and result_port are copied by value — safe to capture in a
-// detached thread.
 template <typename Func>
-void dispatch(std::string object_path, Dart_Port_DL result_port, Func&& func) {
-  std::thread([object_path = std::move(object_path), result_port,
-               func = std::forward<Func>(func)]() {
+void dispatch(sdbus::IConnection& conn,
+              WorkQueue& queue,
+              std::string object_path,
+              Dart_Port_DL result_port,
+              Func&& func) {
+  queue.enqueue([&conn,
+                 object_path = std::move(object_path),
+                 result_port,
+                 func = std::forward<Func>(func)]() mutable {
     try {
-      auto conn = sdbus::createSystemBusConnection();
       auto proxy =
-          sdbus::createProxy(*conn, sdbus::ServiceName{kConnmanService},
+          sdbus::createProxy(conn, sdbus::ServiceName{kConnmanService},
                              sdbus::ObjectPath{object_path});
       TechnologyProxy tech(*proxy);
       func(tech);
@@ -73,20 +82,25 @@ void dispatch(std::string object_path, Dart_Port_DL result_port, Func&& func) {
                 << " — " << e.getMessage() << "\n";
       post_error(result_port, object_path, e);
     }
-  }).detach();
+  });
 }
 
 }  // namespace
 
-void TechnologyBridge::set_powered(const std::string& object_path,
+void TechnologyBridge::set_powered(sdbus::IConnection& conn,
+                                   WorkQueue& queue,
+                                   const std::string& object_path,
                                    bool powered,
                                    Dart_Port_DL result_port) {
-  dispatch(object_path, result_port, [powered](auto& tech) {
+  dispatch(conn, queue, object_path, result_port, [powered](auto& tech) {
     tech.SetProperty("Powered", sdbus::Variant{powered});
   });
 }
 
-void TechnologyBridge::scan(const std::string& object_path,
+void TechnologyBridge::scan(sdbus::IConnection& conn,
+                            WorkQueue& queue,
+                            const std::string& object_path,
                             Dart_Port_DL result_port) {
-  dispatch(object_path, result_port, [](auto& tech) { tech.Scan(); });
+  dispatch(conn, queue, object_path, result_port,
+           [](auto& tech) { tech.Scan(); });
 }

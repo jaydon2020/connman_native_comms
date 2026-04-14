@@ -126,6 +126,8 @@ class _Reader {
     );
   }
 
+  // FIELD ORDER CONTRACT: read order must match glz::meta<ConnmanServiceProps>
+  // in native/include/connman_types.h.  New fields go at the end of both.
   ConnmanServiceProps _decodeServiceProps() {
     return ConnmanServiceProps(
       objectPath: _readString(),
@@ -140,6 +142,7 @@ class _Reader {
       security: _readStringList(),
       nameservers: _readStringList(),
       domains: _readStringList(),
+      error: _readString(),
     );
   }
 

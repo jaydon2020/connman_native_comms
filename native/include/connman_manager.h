@@ -3,10 +3,12 @@
 // Manages the ConnMan D-Bus object tree by:
 //   1. Pulling GetProperties(), GetTechnologies(), GetServices() as snapshot.
 //   2. Subscribing to PropertyChanged, TechnologyAdded/Removed, ServicesChanged
-//   3. Posting all changes to Dart via Dart_PostCObject_DL
+//   3. Subscribing to net.connman.Technology.PropertyChanged on each technology
+//      so per-technology power/connected state changes are delivered live (S-1).
+//   4. Posting all changes to Dart via Dart_PostCObject_DL
 //
 // All sdbus-cpp signal callbacks run on the sdbus event loop thread.
-// The object tree maps are protected by a mutex.
+// The object tree maps are protected by obj_tree_mutex_.
 
 #pragma once
 
@@ -21,6 +23,11 @@
 #include "connman_types.h"
 #include "dart_api_dl.h"
 #include "manager_proxy.h"
+
+// Forward-declared so that the unique_ptr<TechWatcher> member compiles without
+// requiring TechWatcher's full definition in this header.  The destructor is
+// defined in connman_manager.cpp after TechWatcher is complete.
+struct TechWatcher;
 
 // Base struct to guarantee sdbus::IProxy initializes before Manager_proxy.
 struct ConnmanManagerProxyHolder {
@@ -40,13 +47,16 @@ class ConnmanManager : private ConnmanManagerProxyHolder,
   using PropertiesMap = std::map<std::string, sdbus::Variant>;
 
   ConnmanManager(sdbus::IConnection& conn, Dart_Port_DL events_port);
-  ~ConnmanManager() = default;
+
+  // Defined in .cpp so TechWatcher is complete at the point of destruction.
+  ~ConnmanManager();
 
   ConnmanManager(const ConnmanManager&) = delete;
   ConnmanManager& operator=(const ConnmanManager&) = delete;
 
   // Snapshot the current ConnMan state via GetProperties(), GetTechnologies(),
-  // GetServices(). Posts initial state down to the events_port.
+  // GetServices(). Posts initial state down to the events_port and subscribes
+  // to per-technology PropertyChanged signals.
   void get_managed_objects();
 
   // ── Property extraction from D-Bus Variant maps ─────────────────────────
@@ -66,6 +76,11 @@ class ConnmanManager : private ConnmanManagerProxyHolder,
   static T get_prop(const PropertiesMap& props,
                     const std::string& key,
                     const T& fallback = {});
+
+  // Called by TechWatcher when a per-technology PropertyChanged signal fires.
+  void on_technology_property_changed(const std::string& path,
+                                      const std::string& name,
+                                      const sdbus::Variant& value);
 
  protected:
   // ── Signal handlers from Manager_proxy ──────────────────────────────────
@@ -98,6 +113,10 @@ class ConnmanManager : private ConnmanManagerProxyHolder,
   sdbus::IConnection& conn_;
   Dart_Port_DL events_port_;
 
+  // Cached manager-level properties — updated incrementally in
+  // onPropertyChanged() rather than via a full GetProperties() round-trip.
+  ConnmanManagerProps cached_mgr_props_;
+
   // ── Object tree ─────────────────────────────────────────────────────────
   // Mirrors the live ConnMan object tree in memory.
   // Written by get_managed_objects() (caller thread) and by signal handlers
@@ -105,7 +124,16 @@ class ConnmanManager : private ConnmanManagerProxyHolder,
 
   mutable std::mutex obj_tree_mutex_;
   std::map<std::string, ConnmanTechnologyProps> technologies_;
-  std::map<std::string, ConnmanServiceProps> services_;
+  std::map<std::string, ConnmanServiceProps>    services_;
+
+  // Per-technology signal watchers (one per technology object path).
+  // Created in get_managed_objects() and onTechnologyAdded(), removed in
+  // onTechnologyRemoved().  Protected by obj_tree_mutex_.
+  std::map<std::string, std::unique_ptr<TechWatcher>> tech_watchers_;
+
+  // Creates a TechWatcher for the given technology object path without taking
+  // the mutex (proxy creation involves D-Bus I/O).
+  std::unique_ptr<TechWatcher> make_tech_watcher(const std::string& path);
 
   // ── Dart posting helper ─────────────────────────────────────────────────
 
@@ -123,9 +151,13 @@ inline T ConnmanManager::get_prop(const PropertiesMap& props,
   if (it == props.end()) {
     return fallback;
   }
+  // Catch std::bad_cast / std::invalid_argument from sdbus Variant, plus any
+  // sdbus::Error — the original catch only covered the latter.
   try {
     return it->second.get<T>();
-  } catch (const sdbus::Error&) {
+  } catch (const std::exception&) {
+    return fallback;
+  } catch (...) {
     return fallback;
   }
 }
