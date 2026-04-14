@@ -21,6 +21,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
   StreamSubscription<ConnmanTechnology>? _techSub;
   bool _scanning = false;
   bool _connected = false;
+  bool _busy = false;
   String? _error;
 
   ConnmanTechnology? get _wifi {
@@ -83,23 +84,46 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
   Future<void> _toggleScan() async {
     final wifi = _wifi;
-    if (!_connected || wifi == null) return;
+    if (!_connected || wifi == null || _busy) return;
 
-    if (!_powered) {
-      await wifi.setPowered(true);
-      // Give ConnMan a moment to bring the technology up.
-      await Future<void>.delayed(const Duration(milliseconds: 500));
+    setState(() => _busy = true);
+    try {
+      if (!_powered) {
+        await wifi.setPowered(true);
+        // Give ConnMan a moment to bring the technology up.
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+        if (!mounted) return;
+        setState(() {});
+      }
+
+      if (!_scanning) {
+        _services.clear();
+        await wifi.scan();
+      }
+      if (mounted) setState(() => _scanning = !_scanning);
+    } on ConnmanAlreadyEnabledException {
+      // WiFi was already on — proceed as if setPowered succeeded.
       if (!mounted) return;
-      setState(() {});
+      if (!_scanning) {
+        _services.clear();
+        try {
+          await wifi.scan();
+        } on ConnmanException catch (e) {
+          if (mounted) _showError(e.message);
+        }
+      }
+      if (mounted) setState(() => _scanning = !_scanning);
+    } on ConnmanException catch (e) {
+      if (mounted) _showError(e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
+  }
 
-    if (_scanning) {
-      // ConnMan manages scan lifecycle automatically.
-    } else {
-      _services.clear();
-      await wifi.scan();
-    }
-    if (mounted) setState(() => _scanning = !_scanning);
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   @override
@@ -164,7 +188,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
           const SizedBox(width: 8),
           IconButton(
             icon: Icon(_scanning ? Icons.stop : Icons.wifi_find),
-            onPressed: _connected ? _toggleScan : null,
+            onPressed: _connected && !_busy ? _toggleScan : null,
           ),
         ],
       ),
@@ -178,7 +202,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                   const Text('WiFi is powered off.'),
                   const SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: () => _wifi?.setPowered(true),
+                    onPressed: _busy ? null : _toggleScan,
                     child: const Text('Power On'),
                   ),
                 ],
