@@ -49,9 +49,9 @@ struct BridgeContext {
       pthread_setname_np(pthread_self(), "connman_sdbus");
       try {
         conn->enterEventLoop();
-      } catch (const std::exception& e) {
+      } catch (const std::exception& error) {
         std::cerr << "connman_native_comms: sdbus event loop exception: "
-                  << e.what() << "\n";
+                  << error.what() << "\n";
       }
     });
 
@@ -65,10 +65,12 @@ struct BridgeContext {
     work_queue.reset();
 
     // 2. Signal the event loop to exit and wait for it to finish.
-    if (conn)
+    if (conn) {
       conn->leaveEventLoop();
-    if (event_loop_thread.joinable())
+    }
+    if (event_loop_thread.joinable()) {
       event_loop_thread.join();
+    }
 
     // 3. Destroy manager (removes signal handlers and TechWatchers).
     manager.reset();
@@ -88,15 +90,15 @@ void* connman_client_create(void* dart_api_data, int64_t events_port) {
   }
   try {
     return new BridgeContext(events_port);
-  } catch (const std::exception& e) {
+  } catch (const std::exception& error) {
     std::cerr << "connman_native_comms: BridgeContext creation failed: "
-              << e.what() << "\n";
+              << error.what() << "\n";
     return nullptr;
   }
 }
 
 void connman_client_destroy(void* client) {
-  if (client) {
+  if (client != nullptr) {
     delete static_cast<BridgeContext*>(client);
   }
 }
@@ -107,21 +109,23 @@ void connman_technology_set_powered(void* client,
                                     const char* object_path,
                                     bool powered,
                                     int64_t result_port) {
-  if (!client || !object_path)
+  if (client == nullptr || object_path == nullptr) {
     return;
-  auto* ctx = static_cast<BridgeContext*>(client);
-  TechnologyBridge::set_powered(*ctx->worker_conn, *ctx->work_queue,
+  }
+  auto* context = static_cast<BridgeContext*>(client);
+  TechnologyBridge::set_powered(*context->worker_conn, *context->work_queue,
                                 object_path, powered, result_port);
 }
 
 void connman_technology_scan(void* client,
                              const char* object_path,
                              int64_t result_port) {
-  if (!client || !object_path)
+  if (client == nullptr || object_path == nullptr) {
     return;
-  auto* ctx = static_cast<BridgeContext*>(client);
-  TechnologyBridge::scan(*ctx->worker_conn, *ctx->work_queue, object_path,
-                         result_port);
+  }
+  auto* context = static_cast<BridgeContext*>(client);
+  TechnologyBridge::scan(*context->worker_conn, *context->work_queue,
+                         object_path, result_port);
 }
 
 // ── Service Operations ──────────────────────────────────────────────────────
@@ -129,41 +133,45 @@ void connman_technology_scan(void* client,
 void connman_service_connect(void* client,
                              const char* object_path,
                              int64_t result_port) {
-  if (!client || !object_path)
+  if (client == nullptr || object_path == nullptr) {
     return;
-  auto* ctx = static_cast<BridgeContext*>(client);
-  ServiceBridge::connect(*ctx->worker_conn, *ctx->work_queue, object_path,
-                         result_port);
+  }
+  auto* context = static_cast<BridgeContext*>(client);
+  ServiceBridge::connect(*context->worker_conn, *context->work_queue,
+                         object_path, result_port);
 }
 
 void connman_service_disconnect(void* client,
-                                const char* object_path,
-                                int64_t result_port) {
-  if (!client || !object_path)
+                                 const char* object_path,
+                                 int64_t result_port) {
+  if (client == nullptr || object_path == nullptr) {
     return;
-  auto* ctx = static_cast<BridgeContext*>(client);
-  ServiceBridge::disconnect(*ctx->worker_conn, *ctx->work_queue, object_path,
-                            result_port);
+  }
+  auto* context = static_cast<BridgeContext*>(client);
+  ServiceBridge::disconnect(*context->worker_conn, *context->work_queue,
+                            object_path, result_port);
 }
 
 void connman_service_remove(void* client,
                             const char* object_path,
                             int64_t result_port) {
-  if (!client || !object_path)
+  if (client == nullptr || object_path == nullptr) {
     return;
-  auto* ctx = static_cast<BridgeContext*>(client);
-  ServiceBridge::remove(*ctx->worker_conn, *ctx->work_queue, object_path,
-                        result_port);
+  }
+  auto* context = static_cast<BridgeContext*>(client);
+  ServiceBridge::remove(*context->worker_conn, *context->work_queue,
+                        object_path, result_port);
 }
 
 void connman_service_set_auto_connect(void* client,
-                                      const char* object_path,
-                                      bool auto_connect,
-                                      int64_t result_port) {
-  if (!client || !object_path)
+                                       const char* object_path,
+                                       bool auto_connect,
+                                       int64_t result_port) {
+  if (client == nullptr || object_path == nullptr) {
     return;
-  auto* ctx = static_cast<BridgeContext*>(client);
-  ServiceBridge::set_auto_connect(*ctx->worker_conn, *ctx->work_queue,
+  }
+  auto* context = static_cast<BridgeContext*>(client);
+  ServiceBridge::set_auto_connect(*context->worker_conn, *context->work_queue,
                                   object_path, auto_connect, result_port);
 }
 
@@ -174,10 +182,13 @@ void connman_service_set_ipv4_config(void* client,
                                      const char* netmask,
                                      const char* gateway,
                                      int64_t result_port) {
-  if (!client || !object_path || !method || !address || !netmask || !gateway)
+  if (client == nullptr || object_path == nullptr || method == nullptr ||
+      address == nullptr || netmask == nullptr || gateway == nullptr) {
     return;
-  auto* ctx = static_cast<BridgeContext*>(client);
-  ServiceBridge::set_ipv4_config(*ctx->worker_conn, *ctx->work_queue,
+  }
+
+  auto* context = static_cast<BridgeContext*>(client);
+  ServiceBridge::set_ipv4_config(*context->worker_conn, *context->work_queue,
                                  object_path, method, address, netmask, gateway,
                                  result_port);
 }

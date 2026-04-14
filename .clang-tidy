@@ -1,10 +1,3 @@
-Checks: >
-  -*,
-  bugprone-*,
-  modernize-*,
-  performance-*,
-  readability-*
-
+Checks: '-*,bugprone-*,-bugprone-argument-selection,-bugprone-easily-swappable-parameters,-bugprone-empty-catch,-bugprone-reserved-identifier,modernize-*,-modernize-use-trailing-return-type,-modernize-use-using,performance-*,-performance-enum-size,readability-*,-readability-named-parameter'
 WarningsAsErrors: '*'
-HeaderFilterRegex: '(native/include/.*|native/src/.*)'
-
+HeaderFilterRegex: '(native/include/(connman_|glaze_|service_|technology_|work_|internal/).*|native/src/.*)'

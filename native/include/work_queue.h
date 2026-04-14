@@ -28,8 +28,9 @@ class WorkQueue {
       running_ = false;
     }
     cv_.notify_all();
-    if (thread_.joinable())
+    if (thread_.joinable()) {
       thread_.join();
+    }
   }
 
   WorkQueue(const WorkQueue&) = delete;
@@ -58,8 +59,9 @@ class WorkQueue {
         task();  // execute without holding the mutex
         lock.lock();
       }
-      if (!running_)
+      if (!running_) {
         break;
+      }
     }
   }
 

@@ -17,8 +17,8 @@ using namespace connman::msg;
 
 struct TechWatcherBase {
   std::unique_ptr<sdbus::IProxy> proxy;
-  explicit TechWatcherBase(std::unique_ptr<sdbus::IProxy> p)
-      : proxy(std::move(p)) {}
+  explicit TechWatcherBase(std::unique_ptr<sdbus::IProxy> proxy_in)
+      : proxy(std::move(proxy_in)) {}
 };
 
 struct TechWatcher : private TechWatcherBase,
@@ -26,13 +26,13 @@ struct TechWatcher : private TechWatcherBase,
   ConnmanManager& mgr;
   std::string path;
 
-  TechWatcher(std::unique_ptr<sdbus::IProxy> proxy_,
-              ConnmanManager& m,
-              std::string p)
-      : TechWatcherBase(std::move(proxy_)),
+  TechWatcher(std::unique_ptr<sdbus::IProxy> proxy_ptr,
+              ConnmanManager& manager,
+              std::string path_in)
+      : TechWatcherBase(std::move(proxy_ptr)),
         net::connman::Technology_proxy(*TechWatcherBase::proxy),
-        mgr(m),
-        path(std::move(p)) {
+        mgr(manager),
+        path(std::move(path_in)) {
     registerProxy();
   }
 
@@ -53,8 +53,8 @@ ConnmanManager::ConnmanManager(sdbus::IConnection& conn,
       events_port_(events_port) {
   try {
     registerProxy();
-  } catch (const sdbus::Error& e) {
-    std::cerr << "Manager registerProxy failed: " << e.getMessage() << "\n";
+  } catch (const sdbus::Error& error) {
+    std::cerr << "Manager registerProxy failed: " << error.getMessage() << "\n";
   }
 }
 
@@ -74,19 +74,19 @@ void ConnmanManager::get_managed_objects() {
     mgr_props = extract_manager_props(GetProperties());
 
     for (const auto& tech : GetTechnologies()) {
-      auto p = extract_technology_props(tech.get<0>(), tech.get<1>());
-      new_technologies[p.objectPath] = p;
+      auto props = extract_technology_props(tech.get<0>(), tech.get<1>());
+      new_technologies[props.objectPath] = props;
     }
 
-    for (const auto& svc : GetServices()) {
-      auto p = extract_service_props(svc.get<0>(), svc.get<1>());
-      new_services[p.objectPath] = p;
+    for (const auto& service : GetServices()) {
+      auto props = extract_service_props(service.get<0>(), service.get<1>());
+      new_services[props.objectPath] = props;
     }
-  } catch (const sdbus::Error& e) {
-    std::cerr << "ConnmanManager::get_managed_objects failed: " << e.getName()
-              << " - " << e.getMessage() << "\n";
+  } catch (const sdbus::Error& error) {
+    std::cerr << "ConnmanManager::get_managed_objects failed: "
+              << error.getName() << " - " << error.getMessage() << "\n";
     post_glaze(kError, ConnmanError{ConnmanManagerProxyHolder::kService,
-                                    e.getName(), e.getMessage()});
+                                    error.getName(), error.getMessage()});
     return;
   }
 
@@ -157,10 +157,11 @@ ConnmanServiceProps ConnmanManager::extract_service_props(
   res.type = get_prop<std::string>(props, "Type", "");
 
   // "Strength" is represented as a uint8 by connman, safely cast to our int16_t
-  auto st_it = props.find("Strength");
-  if (st_it != props.end()) {
+  auto strength_iterator = props.find("Strength");
+  if (strength_iterator != props.end()) {
     try {
-      res.strength = static_cast<int16_t>(st_it->second.get<uint8_t>());
+      res.strength =
+          static_cast<int16_t>(strength_iterator->second.get<uint8_t>());
     } catch (...) {
       res.strength = 0;
     }
@@ -187,9 +188,9 @@ std::unique_ptr<TechWatcher> ConnmanManager::make_tech_watcher(
         conn_, sdbus::ServiceName{ConnmanManagerProxyHolder::kService},
         sdbus::ObjectPath{path});
     return std::make_unique<TechWatcher>(std::move(proxy), *this, path);
-  } catch (const sdbus::Error& e) {
+  } catch (const sdbus::Error& error) {
     std::cerr << "ConnmanManager: failed to create TechWatcher for " << path
-              << ": " << e.getMessage() << "\n";
+              << ": " << error.getMessage() << "\n";
     return nullptr;
   }
 }
@@ -202,11 +203,12 @@ void ConnmanManager::on_technology_property_changed(
     const sdbus::Variant& value) {
   std::scoped_lock lock(obj_tree_mutex_);
 
-  auto it = technologies_.find(path);
-  if (it == technologies_.end())
+  auto tech_iterator = technologies_.find(path);
+  if (tech_iterator == technologies_.end()) {
     return;
+  }
 
-  auto& tech = it->second;
+  auto& tech = tech_iterator->second;
 
   // Update only the field that changed — avoids a D-Bus round-trip and closes
   // the TOCTOU window of the original full-GetProperties() approach.
@@ -301,8 +303,9 @@ void ConnmanManager::onServicesChanged(
   // Build updates outside the lock.
   std::vector<ConnmanServiceProps> changed_props;
   changed_props.reserve(changed.size());
-  for (const auto& svc : changed) {
-    changed_props.push_back(extract_service_props(svc.get<0>(), svc.get<1>()));
+  for (const auto& service : changed) {
+    changed_props.push_back(
+        extract_service_props(service.get<0>(), service.get<1>()));
   }
 
   std::scoped_lock lock(obj_tree_mutex_);
@@ -324,17 +327,17 @@ template <typename T>
 void ConnmanManager::post_glaze(uint8_t discriminator, const T& value) {
   auto payload = glz::encode(value);
 
-  std::vector<uint8_t> buf;
-  buf.reserve(1 + payload.size());
-  buf.push_back(discriminator);
-  buf.insert(buf.end(), payload.begin(), payload.end());
+  std::vector<uint8_t> buffer;
+  buffer.reserve(1 + payload.size());
+  buffer.push_back(discriminator);
+  buffer.insert(buffer.end(), payload.begin(), payload.end());
 
-  Dart_CObject obj;
-  obj.type = Dart_CObject_kTypedData;
-  obj.value.as_typed_data.type = Dart_TypedData_kUint8;
-  obj.value.as_typed_data.length = static_cast<intptr_t>(buf.size());
-  obj.value.as_typed_data.values = buf.data();
-  Dart_PostCObject_DL(events_port_, &obj);
+  Dart_CObject object;
+  object.type = Dart_CObject_kTypedData;
+  object.value.as_typed_data.type = Dart_TypedData_kUint8;
+  object.value.as_typed_data.length = static_cast<intptr_t>(buffer.size());
+  object.value.as_typed_data.values = buffer.data();
+  Dart_PostCObject_DL(events_port_, &object);
 }
 
 // Explicit template instantiations for all posted types.

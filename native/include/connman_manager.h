@@ -148,14 +148,14 @@ template <typename T>
 inline T ConnmanManager::get_prop(const PropertiesMap& props,
                                   const std::string& key,
                                   const T& fallback) {
-  auto it = props.find(key);
-  if (it == props.end()) {
+  auto iterator = props.find(key);
+  if (iterator == props.end()) {
     return fallback;
   }
   // Catch std::bad_cast / std::invalid_argument from sdbus Variant, plus any
   // sdbus::Error — the original catch only covered the latter.
   try {
-    return it->second.get<T>();
+    return iterator->second.get<T>();
   } catch (const std::exception&) {
     return fallback;
   } catch (...) {

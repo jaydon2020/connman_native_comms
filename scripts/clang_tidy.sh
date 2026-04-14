@@ -14,6 +14,9 @@ fi
 
 CLANG_TIDY="clang-tidy-19"
 if ! command -v "${CLANG_TIDY}" &>/dev/null; then
+    CLANG_TIDY="clang-tidy-18"
+fi
+if ! command -v "${CLANG_TIDY}" &>/dev/null; then
     CLANG_TIDY="clang-tidy"
 fi
 

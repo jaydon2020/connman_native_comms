@@ -25,18 +25,18 @@ namespace glz {
 template <typename T, typename MemberPtr>
 struct FieldDescriptor {
   const char* name;
-  MemberPtr ptr;
+  MemberPtr pointer;
 };
 
 template <typename T, typename MemberPtr>
-constexpr auto field(const char* name, MemberPtr ptr) {
-  return FieldDescriptor<T, MemberPtr>{name, ptr};
+constexpr auto field(const char* name, MemberPtr pointer) {
+  return FieldDescriptor<T, MemberPtr>{name, pointer};
 }
 
 // Overload for deduced class type from member pointer.
 template <typename C, typename M>
-constexpr auto field(const char* name, M C::*ptr) {
-  return FieldDescriptor<C, M C::*>{name, ptr};
+constexpr auto field(const char* name, M C::*pointer) {
+  return FieldDescriptor<C, M C::*>{name, pointer};
 }
 
 // meta<T> — specialize for each struct to list its fields.
@@ -50,179 +50,198 @@ struct meta {
 
 namespace detail {
 
-inline void write_bytes(std::vector<uint8_t>& buf, const void* data, size_t n) {
-  const auto* p = static_cast<const uint8_t*>(data);
-  buf.insert(buf.end(), p, p + n);
+inline void write_bytes(std::vector<uint8_t>& buffer,
+                        const void* data,
+                        size_t num_bytes) {
+  const auto* ptr = static_cast<const uint8_t*>(data);
+  buffer.insert(buffer.end(), ptr, ptr + num_bytes);
 }
 
-inline size_t read_bytes(const uint8_t* buf,
+inline size_t read_bytes(const uint8_t* buffer,
                          size_t offset,
-                         void* out,
-                         size_t n) {
-  std::memcpy(out, buf + offset, n);
-  return offset + n;
+                         void* output,
+                         size_t num_bytes) {
+  std::memcpy(output, buffer + offset, num_bytes);
+  return offset + num_bytes;
 }
 
 // ── Encode primitives ────────────────────────────────────────────────────
 
-inline void encode_field(std::vector<uint8_t>& buf, uint8_t v) {
-  buf.push_back(v);
+inline void encode_field(std::vector<uint8_t>& buffer, uint8_t value) {
+  buffer.push_back(value);
 }
 
-inline void encode_field(std::vector<uint8_t>& buf, bool v) {
-  buf.push_back(v ? 1 : 0);
+inline void encode_field(std::vector<uint8_t>& buffer, bool value) {
+  buffer.push_back(value ? 1 : 0);
 }
 
-inline void encode_field(std::vector<uint8_t>& buf, int16_t v) {
-  write_bytes(buf, &v, sizeof(v));
+inline void encode_field(std::vector<uint8_t>& buffer, int16_t value) {
+  write_bytes(buffer, &value, sizeof(value));
 }
 
-inline void encode_field(std::vector<uint8_t>& buf, uint16_t v) {
-  write_bytes(buf, &v, sizeof(v));
+inline void encode_field(std::vector<uint8_t>& buffer, uint16_t value) {
+  write_bytes(buffer, &value, sizeof(value));
 }
 
-inline void encode_field(std::vector<uint8_t>& buf, uint32_t v) {
-  write_bytes(buf, &v, sizeof(v));
+inline void encode_field(std::vector<uint8_t>& buffer, uint32_t value) {
+  write_bytes(buffer, &value, sizeof(value));
 }
 
-inline void encode_field(std::vector<uint8_t>& buf, uint64_t v) {
-  write_bytes(buf, &v, sizeof(v));
+inline void encode_field(std::vector<uint8_t>& buffer, uint64_t value) {
+  write_bytes(buffer, &value, sizeof(value));
 }
 
-inline void encode_field(std::vector<uint8_t>& buf, const std::string& s) {
-  auto len = static_cast<uint32_t>(s.size());
-  write_bytes(buf, &len, sizeof(len));
-  write_bytes(buf, s.data(), s.size());
+inline void encode_field(std::vector<uint8_t>& buffer,
+                         const std::string& string_val) {
+  auto length = static_cast<uint32_t>(string_val.size());
+  write_bytes(buffer, &length, sizeof(length));
+  write_bytes(buffer, string_val.data(), string_val.size());
 }
 
-inline void encode_field(std::vector<uint8_t>& buf,
-                         const std::vector<std::string>& v) {
-  auto count = static_cast<uint32_t>(v.size());
-  write_bytes(buf, &count, sizeof(count));
-  for (const auto& s : v) {
-    encode_field(buf, s);
+inline void encode_field(std::vector<uint8_t>& buffer,
+                         const std::vector<std::string>& vector_in) {
+  auto count = static_cast<uint32_t>(vector_in.size());
+  write_bytes(buffer, &count, sizeof(count));
+  for (const auto& string_val : vector_in) {
+    encode_field(buffer, string_val);
   }
 }
 
-inline void encode_field(std::vector<uint8_t>& buf,
-                         const std::vector<uint8_t>& v) {
-  auto count = static_cast<uint32_t>(v.size());
-  write_bytes(buf, &count, sizeof(count));
-  write_bytes(buf, v.data(), v.size());
+inline void encode_field(std::vector<uint8_t>& buffer,
+                         const std::vector<uint8_t>& vector_in) {
+  auto count = static_cast<uint32_t>(vector_in.size());
+  write_bytes(buffer, &count, sizeof(count));
+  write_bytes(buffer, vector_in.data(), vector_in.size());
 }
 
 // Forward declaration for struct encoding (used by vector<T> below).
 template <typename T>
-void encode_struct(std::vector<uint8_t>& buf, const T& obj);
+void encode_struct(std::vector<uint8_t>& buffer, const T& object);
 
 // Encode a vector of structs that have glz::meta<T> specializations.
 template <typename T>
   requires(std::tuple_size_v<decltype(meta<T>::fields)> > 0)
-void encode_field(std::vector<uint8_t>& buf, const std::vector<T>& v) {
-  auto count = static_cast<uint32_t>(v.size());
-  write_bytes(buf, &count, sizeof(count));
-  for (const auto& item : v) {
-    encode_struct(buf, item);
+inline void encode_field(std::vector<uint8_t>& buffer,
+                         const std::vector<T>& vector_in) {
+  auto count = static_cast<uint32_t>(vector_in.size());
+  write_bytes(buffer, &count, sizeof(count));
+  for (const auto& item : vector_in) {
+    encode_struct(buffer, item);
   }
 }
 
 // Encode a map<string, vector<uint8_t>>.
-inline void encode_field(std::vector<uint8_t>& buf,
-                         const std::map<std::string, std::vector<uint8_t>>& m) {
-  auto count = static_cast<uint32_t>(m.size());
-  write_bytes(buf, &count, sizeof(count));
-  for (const auto& [key, val] : m) {
-    encode_field(buf, key);
-    encode_field(buf, val);
+inline void encode_field(
+    std::vector<uint8_t>& buffer,
+    const std::map<std::string, std::vector<uint8_t>>& mapping) {
+  auto count = static_cast<uint32_t>(mapping.size());
+  write_bytes(buffer, &count, sizeof(count));
+  for (const auto& [key, value] : mapping) {
+    encode_field(buffer, key);
+    encode_field(buffer, value);
   }
 }
 
 // ── Decode primitives ────────────────────────────────────────────────────
 
-inline size_t decode_field(const uint8_t* buf, size_t offset, uint8_t& v) {
-  v = buf[offset];
-  return offset + 1;
-}
-
-inline size_t decode_field(const uint8_t* buf, size_t offset, bool& v) {
-  v = buf[offset] != 0;
-  return offset + 1;
-}
-
-inline size_t decode_field(const uint8_t* buf, size_t offset, int16_t& v) {
-  return read_bytes(buf, offset, &v, sizeof(v));
-}
-
-inline size_t decode_field(const uint8_t* buf, size_t offset, uint16_t& v) {
-  return read_bytes(buf, offset, &v, sizeof(v));
-}
-
-inline size_t decode_field(const uint8_t* buf, size_t offset, uint32_t& v) {
-  return read_bytes(buf, offset, &v, sizeof(v));
-}
-
-inline size_t decode_field(const uint8_t* buf, size_t offset, uint64_t& v) {
-  return read_bytes(buf, offset, &v, sizeof(v));
-}
-
-inline size_t decode_field(const uint8_t* buf, size_t offset, std::string& s) {
-  uint32_t len{};
-  offset = read_bytes(buf, offset, &len, sizeof(len));
-  s.assign(reinterpret_cast<const char*>(buf + offset), len);
-  return offset + len;
-}
-
-inline size_t decode_field(const uint8_t* buf,
+inline size_t decode_field(const uint8_t* buffer,
                            size_t offset,
-                           std::vector<std::string>& v) {
+                           uint8_t& value) {
+  value = buffer[offset];
+  return offset + 1;
+}
+
+inline size_t decode_field(const uint8_t* buffer, size_t offset, bool& value) {
+  value = buffer[offset] != 0;
+  return offset + 1;
+}
+
+inline size_t decode_field(const uint8_t* buffer,
+                           size_t offset,
+                           int16_t& value) {
+  return read_bytes(buffer, offset, &value, sizeof(value));
+}
+
+inline size_t decode_field(const uint8_t* buffer,
+                           size_t offset,
+                           uint16_t& value) {
+  return read_bytes(buffer, offset, &value, sizeof(value));
+}
+
+inline size_t decode_field(const uint8_t* buffer,
+                           size_t offset,
+                           uint32_t& value) {
+  return read_bytes(buffer, offset, &value, sizeof(value));
+}
+
+inline size_t decode_field(const uint8_t* buffer,
+                           size_t offset,
+                           uint64_t& value) {
+  return read_bytes(buffer, offset, &value, sizeof(value));
+}
+
+inline size_t decode_field(const uint8_t* buffer,
+                           size_t offset,
+                           std::string& string_val) {
+  uint32_t length{};
+  offset = read_bytes(buffer, offset, &length, sizeof(length));
+  string_val.assign(reinterpret_cast<const char*>(buffer + offset), length);
+  return offset + length;
+}
+
+inline size_t decode_field(const uint8_t* buffer,
+                           size_t offset,
+                           std::vector<std::string>& vector_in) {
   uint32_t count{};
-  offset = read_bytes(buf, offset, &count, sizeof(count));
-  v.resize(count);
-  for (uint32_t i = 0; i < count; ++i) {
-    offset = decode_field(buf, offset, v[i]);
+  offset = read_bytes(buffer, offset, &count, sizeof(count));
+  vector_in.resize(count);
+  for (uint32_t index = 0; index < count; ++index) {
+    offset = decode_field(buffer, offset, vector_in[index]);
   }
   return offset;
 }
 
-inline size_t decode_field(const uint8_t* buf,
+inline size_t decode_field(const uint8_t* buffer,
                            size_t offset,
-                           std::vector<uint8_t>& v) {
+                           std::vector<uint8_t>& vector_in) {
   uint32_t count{};
-  offset = read_bytes(buf, offset, &count, sizeof(count));
-  v.assign(buf + offset, buf + offset + count);
+  offset = read_bytes(buffer, offset, &count, sizeof(count));
+  vector_in.assign(buffer + offset, buffer + offset + count);
   return offset + count;
 }
 
 // Forward declaration for struct decoding (used by vector<T> below).
 template <typename T>
-size_t decode_struct(const uint8_t* buf, size_t offset, T& obj);
+size_t decode_struct(const uint8_t* buffer, size_t offset, T& object);
 
 // Decode a vector of structs that have glz::meta<T> specializations.
 template <typename T>
-  requires(std::tuple_size_v<decltype(meta<T>::fields)> > 0)
-size_t decode_field(const uint8_t* buf, size_t offset, std::vector<T>& v) {
+inline size_t decode_field(const uint8_t* buffer,
+                           size_t offset,
+                           std::vector<T>& vector_in) {
   uint32_t count{};
-  offset = read_bytes(buf, offset, &count, sizeof(count));
-  v.resize(count);
-  for (uint32_t i = 0; i < count; ++i) {
-    offset = decode_struct(buf, offset, v[i]);
+  offset = read_bytes(buffer, offset, &count, sizeof(count));
+  vector_in.resize(count);
+  for (uint32_t index = 0; index < count; ++index) {
+    offset = decode_struct(buffer, offset, vector_in[index]);
   }
   return offset;
 }
 
 // Decode a map<string, vector<uint8_t>>.
-inline size_t decode_field(const uint8_t* buf,
-                           size_t offset,
-                           std::map<std::string, std::vector<uint8_t>>& m) {
+inline size_t decode_field(
+    const uint8_t* buffer,
+    size_t offset,
+    std::map<std::string, std::vector<uint8_t>>& mapping) {
   uint32_t count{};
-  offset = read_bytes(buf, offset, &count, sizeof(count));
-  m.clear();
-  for (uint32_t i = 0; i < count; ++i) {
+  offset = read_bytes(buffer, offset, &count, sizeof(count));
+  mapping.clear();
+  for (uint32_t index = 0; index < count; ++index) {
     std::string key;
-    offset = decode_field(buf, offset, key);
-    std::vector<uint8_t> val;
-    offset = decode_field(buf, offset, val);
-    m[std::move(key)] = std::move(val);
+    offset = decode_field(buffer, offset, key);
+    std::vector<uint8_t> value_vec;
+    offset = decode_field(buffer, offset, value_vec);
+    mapping[std::move(key)] = std::move(value_vec);
   }
   return offset;
 }
@@ -230,52 +249,55 @@ inline size_t decode_field(const uint8_t* buf,
 // ── Struct encode/decode via meta<T>::fields ─────────────────────────────
 
 template <typename T, typename Tuple, std::size_t... I>
-void encode_impl(std::vector<uint8_t>& buf,
-                 const T& obj,
+void encode_impl(std::vector<uint8_t>& buffer,
+                 const T& object,
                  const Tuple& fields,
-                 std::index_sequence<I...>) {
-  (encode_field(buf, obj.*(std::get<I>(fields).ptr)), ...);
+                 std::index_sequence<I...> /*unused*/) {
+  (encode_field(buffer, object.*(std::get<I>(fields).pointer)), ...);
 }
 
 template <typename T, typename Tuple, std::size_t... I>
-size_t decode_impl(const uint8_t* buf,
+size_t decode_impl(const uint8_t* buffer,
                    size_t offset,
-                   T& obj,
+                   T& object,
                    const Tuple& fields,
-                   std::index_sequence<I...>) {
-  ((offset = decode_field(buf, offset, obj.*(std::get<I>(fields).ptr))), ...);
+                   std::index_sequence<I...> /*unused*/) {
+  ((offset =
+        decode_field(buffer, offset, object.*(std::get<I>(fields).pointer))),
+   ...);
   return offset;
 }
 
 template <typename T>
-void encode_struct(std::vector<uint8_t>& buf, const T& obj) {
+inline void encode_struct(std::vector<uint8_t>& buffer, const T& object) {
   constexpr auto fields = meta<T>::fields;
-  constexpr auto N = std::tuple_size_v<decltype(fields)>;
-  encode_impl(buf, obj, fields, std::make_index_sequence<N>{});
+  constexpr auto num_fields = std::tuple_size_v<decltype(fields)>;
+  encode_impl(buffer, object, fields, std::make_index_sequence<num_fields>{});
 }
 
 template <typename T>
-size_t decode_struct(const uint8_t* buf, size_t offset, T& obj) {
+inline size_t decode_struct(const uint8_t* buffer, size_t offset, T& object) {
   constexpr auto fields = meta<T>::fields;
-  constexpr auto N = std::tuple_size_v<decltype(fields)>;
-  return decode_impl(buf, offset, obj, fields, std::make_index_sequence<N>{});
+  constexpr auto num_fields = std::tuple_size_v<decltype(fields)>;
+  return decode_impl(buffer, offset, object, fields,
+                     std::make_index_sequence<num_fields>{});
 }
 
 }  // namespace detail
 
 // Encode a struct to a byte buffer using its meta<T>::fields.
 template <typename T>
-std::vector<uint8_t> encode(const T& obj) {
-  std::vector<uint8_t> buf;
-  detail::encode_struct(buf, obj);
-  return buf;
+inline std::vector<uint8_t> encode(const T& object) {
+  std::vector<uint8_t> buffer;
+  detail::encode_struct(buffer, object);
+  return buffer;
 }
 
 // Decode a struct from a byte buffer using its meta<T>::fields.
 // Returns the offset past the consumed bytes.
 template <typename T>
-size_t decode(const uint8_t* buf, size_t offset, T& obj) {
-  return detail::decode_struct(buf, offset, obj);
+inline size_t decode(const uint8_t* buffer, size_t offset, T& object) {
+  return detail::decode_struct(buffer, offset, object);
 }
 
 }  // namespace glz

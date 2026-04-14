@@ -20,12 +20,19 @@ target_include_directories(dart_api_dl PUBLIC include)
 add_library(connman_types INTERFACE)
 target_include_directories(connman_types INTERFACE include)
 
-# ── Connman Native Comms shared library ──────────────────────────────────────
-add_library(connman_nc SHARED
-    src/connman_bridge.cpp
+# ── Connman Native Comms core logic (shared between lib and tests) ───────────
+add_library(connman_core_obj OBJECT
     src/connman_manager.cpp
     src/technology_bridge.cpp
     src/service_bridge.cpp
+)
+target_include_directories(connman_core_obj PUBLIC include generated)
+target_link_libraries(connman_core_obj PUBLIC sdbus-c++)
+
+# ── Connman Native Comms shared library ──────────────────────────────────────
+add_library(connman_nc SHARED
+    src/connman_bridge.cpp
+    $<TARGET_OBJECTS:connman_core_obj>
     $<TARGET_OBJECTS:dart_api_dl>
 )
 
