@@ -33,10 +33,10 @@ struct BridgeContext {
   std::thread event_loop_thread;
 
   explicit BridgeContext(int64_t events_port) {
-    conn        = sdbus::createSystemBusConnection();
+    conn = sdbus::createSystemBusConnection();
     worker_conn = sdbus::createSystemBusConnection();
-    work_queue  = std::make_unique<WorkQueue>();
-    manager     = std::make_unique<ConnmanManager>(*conn, events_port);
+    work_queue = std::make_unique<WorkQueue>();
+    manager = std::make_unique<ConnmanManager>(*conn, events_port);
 
     // Start the event loop BEFORE taking the snapshot (C-2).
     // sdbus-cpp v2 is thread-safe for concurrent method calls, so
@@ -65,8 +65,10 @@ struct BridgeContext {
     work_queue.reset();
 
     // 2. Signal the event loop to exit and wait for it to finish.
-    if (conn) conn->leaveEventLoop();
-    if (event_loop_thread.joinable()) event_loop_thread.join();
+    if (conn)
+      conn->leaveEventLoop();
+    if (event_loop_thread.joinable())
+      event_loop_thread.join();
 
     // 3. Destroy manager (removes signal handlers and TechWatchers).
     manager.reset();
@@ -105,7 +107,8 @@ void connman_technology_set_powered(void* client,
                                     const char* object_path,
                                     bool powered,
                                     int64_t result_port) {
-  if (!client || !object_path) return;
+  if (!client || !object_path)
+    return;
   auto* ctx = static_cast<BridgeContext*>(client);
   TechnologyBridge::set_powered(*ctx->worker_conn, *ctx->work_queue,
                                 object_path, powered, result_port);
@@ -114,10 +117,11 @@ void connman_technology_set_powered(void* client,
 void connman_technology_scan(void* client,
                              const char* object_path,
                              int64_t result_port) {
-  if (!client || !object_path) return;
+  if (!client || !object_path)
+    return;
   auto* ctx = static_cast<BridgeContext*>(client);
-  TechnologyBridge::scan(*ctx->worker_conn, *ctx->work_queue,
-                         object_path, result_port);
+  TechnologyBridge::scan(*ctx->worker_conn, *ctx->work_queue, object_path,
+                         result_port);
 }
 
 // ── Service Operations ──────────────────────────────────────────────────────
@@ -125,35 +129,39 @@ void connman_technology_scan(void* client,
 void connman_service_connect(void* client,
                              const char* object_path,
                              int64_t result_port) {
-  if (!client || !object_path) return;
+  if (!client || !object_path)
+    return;
   auto* ctx = static_cast<BridgeContext*>(client);
-  ServiceBridge::connect(*ctx->worker_conn, *ctx->work_queue,
-                         object_path, result_port);
+  ServiceBridge::connect(*ctx->worker_conn, *ctx->work_queue, object_path,
+                         result_port);
 }
 
 void connman_service_disconnect(void* client,
                                 const char* object_path,
                                 int64_t result_port) {
-  if (!client || !object_path) return;
+  if (!client || !object_path)
+    return;
   auto* ctx = static_cast<BridgeContext*>(client);
-  ServiceBridge::disconnect(*ctx->worker_conn, *ctx->work_queue,
-                            object_path, result_port);
+  ServiceBridge::disconnect(*ctx->worker_conn, *ctx->work_queue, object_path,
+                            result_port);
 }
 
 void connman_service_remove(void* client,
                             const char* object_path,
                             int64_t result_port) {
-  if (!client || !object_path) return;
+  if (!client || !object_path)
+    return;
   auto* ctx = static_cast<BridgeContext*>(client);
-  ServiceBridge::remove(*ctx->worker_conn, *ctx->work_queue,
-                        object_path, result_port);
+  ServiceBridge::remove(*ctx->worker_conn, *ctx->work_queue, object_path,
+                        result_port);
 }
 
 void connman_service_set_auto_connect(void* client,
                                       const char* object_path,
                                       bool auto_connect,
                                       int64_t result_port) {
-  if (!client || !object_path) return;
+  if (!client || !object_path)
+    return;
   auto* ctx = static_cast<BridgeContext*>(client);
   ServiceBridge::set_auto_connect(*ctx->worker_conn, *ctx->work_queue,
                                   object_path, auto_connect, result_port);
@@ -170,6 +178,6 @@ void connman_service_set_ipv4_config(void* client,
     return;
   auto* ctx = static_cast<BridgeContext*>(client);
   ServiceBridge::set_ipv4_config(*ctx->worker_conn, *ctx->work_queue,
-                                 object_path, method, address, netmask,
-                                 gateway, result_port);
+                                 object_path, method, address, netmask, gateway,
+                                 result_port);
 }

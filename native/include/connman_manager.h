@@ -4,7 +4,8 @@
 //   1. Pulling GetProperties(), GetTechnologies(), GetServices() as snapshot.
 //   2. Subscribing to PropertyChanged, TechnologyAdded/Removed, ServicesChanged
 //   3. Subscribing to net.connman.Technology.PropertyChanged on each technology
-//      so per-technology power/connected state changes are delivered live (S-1).
+//      so per-technology power/connected state changes are delivered live
+//      (S-1).
 //   4. Posting all changes to Dart via Dart_PostCObject_DL
 //
 // All sdbus-cpp signal callbacks run on the sdbus event loop thread.
@@ -124,7 +125,7 @@ class ConnmanManager : private ConnmanManagerProxyHolder,
 
   mutable std::mutex obj_tree_mutex_;
   std::map<std::string, ConnmanTechnologyProps> technologies_;
-  std::map<std::string, ConnmanServiceProps>    services_;
+  std::map<std::string, ConnmanServiceProps> services_;
 
   // Per-technology signal watchers (one per technology object path).
   // Created in get_managed_objects() and onTechnologyAdded(), removed in

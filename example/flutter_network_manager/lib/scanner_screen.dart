@@ -38,7 +38,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
       setState(() => _connected = true);
 
       // Rebuild whenever the technology list changes (add/remove/power-toggle).
-      _addedSub   = _client.technologyAdded.listen(_onTechEvent);
+      _addedSub = _client.technologyAdded.listen(_onTechEvent);
       _changedSub = _client.technologyChanged.listen(_onTechEvent);
       _removedSub = _client.technologyRemoved.listen(_onTechEvent);
     } catch (e) {
@@ -83,11 +83,10 @@ class _ScannerScreenState extends State<ScannerScreen> {
                   itemCount: techs.length,
                   separatorBuilder: (_, __) =>
                       const Divider(height: 1, indent: 72),
-                  itemBuilder: (context, index) =>
-                      _TechnologyTile(
-                        technology: techs[index],
-                        client: _client,
-                      ),
+                  itemBuilder: (context, index) => _TechnologyTile(
+                    technology: techs[index],
+                    client: _client,
+                  ),
                 ),
     );
   }
@@ -145,11 +144,11 @@ class _TechnologyTile extends StatelessWidget {
     final statusText = _statusText(tech);
 
     return ListTile(
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       leading: CircleAvatar(
-        backgroundColor:
-            tech.powered ? Theme.of(context).colorScheme.primaryContainer : Colors.grey.shade200,
+        backgroundColor: tech.powered
+            ? Theme.of(context).colorScheme.primaryContainer
+            : Colors.grey.shade200,
         child: Icon(
           _iconFor(tech.type),
           color: tech.powered
@@ -179,8 +178,7 @@ class _TechnologyTile extends StatelessWidget {
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute<void>(
-          builder: (_) =>
-              TechnologyScreen(client: client, technology: tech),
+          builder: (_) => TechnologyScreen(client: client, technology: tech),
         ),
       ),
     );

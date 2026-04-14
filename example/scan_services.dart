@@ -16,8 +16,7 @@ Future<void> main(List<String> args) async {
   await client.connect();
 
   // Find the WiFi technology.
-  final wifi =
-      client.technologies.where((t) => t.type == 'wifi').firstOrNull;
+  final wifi = client.technologies.where((t) => t.type == 'wifi').firstOrNull;
   if (wifi == null) {
     print('No WiFi technology found.');
     await client.close();
@@ -55,9 +54,7 @@ Future<void> main(List<String> args) async {
   await subChanged.cancel();
 
   // Summary: all known WiFi services sorted by signal strength.
-  final wifiServices = client.services
-      .where((s) => s.type == 'wifi')
-      .toList()
+  final wifiServices = client.services.where((s) => s.type == 'wifi').toList()
     ..sort((a, b) => b.strength.compareTo(a.strength));
 
   if (wifiServices.isNotEmpty) {

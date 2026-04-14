@@ -22,7 +22,8 @@ struct TechnologyProxy : public net::connman::Technology_proxy {
   // for one-shot set/scan operations.
 };
 
-// ── Dart posting ──────────────────────────────────────────────────────────────
+// ── Dart posting
+// ──────────────────────────────────────────────────────────────
 
 template <typename T>
 void post_glaze(Dart_Port_DL port, uint8_t discriminator, const T& value) {
@@ -52,7 +53,8 @@ void post_error(Dart_Port_DL port,
              ConnmanError{object_path, e.getName(), e.getMessage()});
 }
 
-// ── Shared-connection dispatch ────────────────────────────────────────────────
+// ── Shared-connection dispatch
+// ────────────────────────────────────────────────
 //
 // Enqueues a task on the WorkQueue.  The task creates a short-lived proxy on
 // the shared worker connection (conn), calls the D-Bus method, and posts the
@@ -66,14 +68,11 @@ void dispatch(sdbus::IConnection& conn,
               std::string object_path,
               Dart_Port_DL result_port,
               Func&& func) {
-  queue.enqueue([&conn,
-                 object_path = std::move(object_path),
-                 result_port,
+  queue.enqueue([&conn, object_path = std::move(object_path), result_port,
                  func = std::forward<Func>(func)]() mutable {
     try {
-      auto proxy =
-          sdbus::createProxy(conn, sdbus::ServiceName{kConnmanService},
-                             sdbus::ObjectPath{object_path});
+      auto proxy = sdbus::createProxy(conn, sdbus::ServiceName{kConnmanService},
+                                      sdbus::ObjectPath{object_path});
       TechnologyProxy tech(*proxy);
       func(tech);
       post_success(result_port, object_path);

@@ -96,7 +96,8 @@ struct ConnmanServiceProps {
   std::vector<std::string> security;
   std::vector<std::string> nameservers;
   std::vector<std::string> domains;
-  std::string error;  // ConnMan "Error" property: "dhcp-failed", "connect-failed", "" if none
+  std::string error;  // ConnMan "Error" property: "dhcp-failed",
+                      // "connect-failed", "" if none
 };
 template <>
 struct glz::meta<ConnmanServiceProps> {

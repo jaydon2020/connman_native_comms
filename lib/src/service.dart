@@ -22,6 +22,7 @@ class ConnmanService {
   List<String> security;
   List<String> nameservers;
   List<String> domains;
+
   /// ConnMan "Error" property: "dhcp-failed", "connect-failed", "" when clean.
   String error;
 
@@ -83,7 +84,8 @@ class ConnmanService {
     // ignores extra keys for "dhcp"/"off", but callers should not pass them
     // to avoid confusion about what took effect.
     assert(
-      method == 'manual' || (address.isEmpty && netmask.isEmpty && gateway.isEmpty),
+      method == 'manual' ||
+          (address.isEmpty && netmask.isEmpty && gateway.isEmpty),
       'setIpv4Config: address/netmask/gateway are only used when method is "manual". '
       'Got method="$method" with non-empty address/netmask/gateway.',
     );

@@ -27,8 +27,7 @@ Future<void> main(List<String> args) async {
   final client = ConnmanClient();
   await client.connect();
 
-  final wifi =
-      client.technologies.where((t) => t.type == 'wifi').firstOrNull;
+  final wifi = client.technologies.where((t) => t.type == 'wifi').firstOrNull;
   if (wifi == null) {
     print('No WiFi technology found.');
     await client.close();
@@ -41,8 +40,7 @@ Future<void> main(List<String> args) async {
     await Future<void>.delayed(const Duration(milliseconds: 500));
   }
 
-  final service =
-      await findService(client, wifi, ssid: ssid, timeout: timeout);
+  final service = await findService(client, wifi, ssid: ssid, timeout: timeout);
   if (service == null) {
     await client.close();
     return;

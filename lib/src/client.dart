@@ -61,8 +61,7 @@ class ConnmanClient {
     if (_client == nullptr) {
       _eventsPort!.close();
       _eventsPort = null;
-      throw StateError(
-          'Failed to create native ConnmanClient. '
+      throw StateError('Failed to create native ConnmanClient. '
           'Check D-Bus availability and Dart API DL initialization.');
     }
 
@@ -199,8 +198,7 @@ class ConnmanClient {
       case MsgTypes.kError:
         final props = payload as ConnmanError;
         _pendingMethodCalls.remove(props.objectPath)?.completeError(
-            parseConnmanException(
-                props.name, props.objectPath, props.message));
+            parseConnmanException(props.name, props.objectPath, props.message));
         break;
     }
   }
@@ -231,8 +229,8 @@ class ConnmanClient {
       return Future.error(StateError('Client is not connected.'));
     }
     if (_pendingMethodCalls.containsKey(objectPath)) {
-      return Future.error(
-          ConnmanInProgressException(objectPath, 'Operation already in progress'));
+      return Future.error(ConnmanInProgressException(
+          objectPath, 'Operation already in progress'));
     }
     final completer = Completer<void>();
     _pendingMethodCalls[objectPath] = completer;

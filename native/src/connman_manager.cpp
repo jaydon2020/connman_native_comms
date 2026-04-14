@@ -7,7 +7,8 @@
 
 using namespace connman::msg;
 
-// ── TechWatcher ───────────────────────────────────────────────────────────────
+// ── TechWatcher
+// ───────────────────────────────────────────────────────────────
 //
 // Concrete Technology_proxy that forwards PropertyChanged signals to
 // ConnmanManager::on_technology_property_changed().  Defined here (not in the
@@ -23,7 +24,7 @@ struct TechWatcherBase {
 struct TechWatcher : private TechWatcherBase,
                      public net::connman::Technology_proxy {
   ConnmanManager& mgr;
-  std::string     path;
+  std::string path;
 
   TechWatcher(std::unique_ptr<sdbus::IProxy> proxy_,
               ConnmanManager& m,
@@ -67,7 +68,7 @@ void ConnmanManager::get_managed_objects() {
   // and we must not hold the mutex while waiting on D-Bus.
   ConnmanManagerProps mgr_props;
   std::map<std::string, ConnmanTechnologyProps> new_technologies;
-  std::map<std::string, ConnmanServiceProps>    new_services;
+  std::map<std::string, ConnmanServiceProps> new_services;
 
   try {
     mgr_props = extract_manager_props(GetProperties());
@@ -105,9 +106,9 @@ void ConnmanManager::get_managed_objects() {
   std::scoped_lock lock(obj_tree_mutex_);
 
   cached_mgr_props_ = mgr_props;
-  technologies_     = std::move(new_technologies);
-  services_         = std::move(new_services);
-  tech_watchers_    = std::move(new_watchers);
+  technologies_ = std::move(new_technologies);
+  services_ = std::move(new_services);
+  tech_watchers_ = std::move(new_watchers);
 
   for (const auto& [path, tech] : technologies_) {
     post_glaze(kTechnologyProps, tech);
@@ -123,9 +124,9 @@ void ConnmanManager::get_managed_objects() {
 ConnmanManagerProps ConnmanManager::extract_manager_props(
     const PropertiesMap& props) {
   ConnmanManagerProps res;
-  res.state        = get_prop<std::string>(props, "State", "");
-  res.offlineMode  = get_prop<bool>(props, "OfflineMode", false);
-  res.sessionMode  = get_prop<bool>(props, "SessionMode", false);
+  res.state = get_prop<std::string>(props, "State", "");
+  res.offlineMode = get_prop<bool>(props, "OfflineMode", false);
+  res.sessionMode = get_prop<bool>(props, "SessionMode", false);
   return res;
 }
 
@@ -133,14 +134,16 @@ ConnmanTechnologyProps ConnmanManager::extract_technology_props(
     const std::string& object_path,
     const PropertiesMap& props) {
   ConnmanTechnologyProps res;
-  res.objectPath           = object_path;
-  res.name                 = get_prop<std::string>(props, "Name", "");
-  res.type                 = get_prop<std::string>(props, "Type", "");
-  res.powered              = get_prop<bool>(props, "Powered", false);
-  res.connected            = get_prop<bool>(props, "Connected", false);
-  res.tethering            = get_prop<bool>(props, "Tethering", false);
-  res.tetheringIdentifier  = get_prop<std::string>(props, "TetheringIdentifier", "");
-  res.tetheringPassphrase  = get_prop<std::string>(props, "TetheringPassphrase", "");
+  res.objectPath = object_path;
+  res.name = get_prop<std::string>(props, "Name", "");
+  res.type = get_prop<std::string>(props, "Type", "");
+  res.powered = get_prop<bool>(props, "Powered", false);
+  res.connected = get_prop<bool>(props, "Connected", false);
+  res.tethering = get_prop<bool>(props, "Tethering", false);
+  res.tetheringIdentifier =
+      get_prop<std::string>(props, "TetheringIdentifier", "");
+  res.tetheringPassphrase =
+      get_prop<std::string>(props, "TetheringPassphrase", "");
   return res;
 }
 
@@ -148,10 +151,10 @@ ConnmanServiceProps ConnmanManager::extract_service_props(
     const std::string& object_path,
     const PropertiesMap& props) {
   ConnmanServiceProps res;
-  res.objectPath  = object_path;
-  res.name        = get_prop<std::string>(props, "Name", "");
-  res.state       = get_prop<std::string>(props, "State", "");
-  res.type        = get_prop<std::string>(props, "Type", "");
+  res.objectPath = object_path;
+  res.name = get_prop<std::string>(props, "Name", "");
+  res.state = get_prop<std::string>(props, "State", "");
+  res.type = get_prop<std::string>(props, "Type", "");
 
   // "Strength" is represented as a uint8 by connman, safely cast to our int16_t
   auto st_it = props.find("Strength");
@@ -163,14 +166,15 @@ ConnmanServiceProps ConnmanManager::extract_service_props(
     }
   }
 
-  res.favorite    = get_prop<bool>(props, "Favorite", false);
-  res.immutable   = get_prop<bool>(props, "Immutable", false);
+  res.favorite = get_prop<bool>(props, "Favorite", false);
+  res.immutable = get_prop<bool>(props, "Immutable", false);
   res.autoConnect = get_prop<bool>(props, "AutoConnect", false);
-  res.roaming     = get_prop<bool>(props, "Roaming", false);
-  res.security    = get_prop<std::vector<std::string>>(props, "Security", {});
-  res.nameservers = get_prop<std::vector<std::string>>(props, "Nameservers", {});
-  res.domains     = get_prop<std::vector<std::string>>(props, "Domains", {});
-  res.error       = get_prop<std::string>(props, "Error", "");
+  res.roaming = get_prop<bool>(props, "Roaming", false);
+  res.security = get_prop<std::vector<std::string>>(props, "Security", {});
+  res.nameservers =
+      get_prop<std::vector<std::string>>(props, "Nameservers", {});
+  res.domains = get_prop<std::vector<std::string>>(props, "Domains", {});
+  res.error = get_prop<std::string>(props, "Error", "");
   return res;
 }
 
@@ -180,8 +184,7 @@ std::unique_ptr<TechWatcher> ConnmanManager::make_tech_watcher(
     const std::string& path) {
   try {
     auto proxy = sdbus::createProxy(
-        conn_,
-        sdbus::ServiceName{ConnmanManagerProxyHolder::kService},
+        conn_, sdbus::ServiceName{ConnmanManagerProxyHolder::kService},
         sdbus::ObjectPath{path});
     return std::make_unique<TechWatcher>(std::move(proxy), *this, path);
   } catch (const sdbus::Error& e) {
@@ -200,22 +203,38 @@ void ConnmanManager::on_technology_property_changed(
   std::scoped_lock lock(obj_tree_mutex_);
 
   auto it = technologies_.find(path);
-  if (it == technologies_.end()) return;
+  if (it == technologies_.end())
+    return;
 
   auto& tech = it->second;
 
   // Update only the field that changed — avoids a D-Bus round-trip and closes
   // the TOCTOU window of the original full-GetProperties() approach.
   if (name == "Powered") {
-    try { tech.powered = value.get<bool>(); } catch (...) {}
+    try {
+      tech.powered = value.get<bool>();
+    } catch (...) {
+    }
   } else if (name == "Connected") {
-    try { tech.connected = value.get<bool>(); } catch (...) {}
+    try {
+      tech.connected = value.get<bool>();
+    } catch (...) {
+    }
   } else if (name == "Tethering") {
-    try { tech.tethering = value.get<bool>(); } catch (...) {}
+    try {
+      tech.tethering = value.get<bool>();
+    } catch (...) {
+    }
   } else if (name == "TetheringIdentifier") {
-    try { tech.tetheringIdentifier = value.get<std::string>(); } catch (...) {}
+    try {
+      tech.tetheringIdentifier = value.get<std::string>();
+    } catch (...) {
+    }
   } else if (name == "TetheringPassphrase") {
-    try { tech.tetheringPassphrase = value.get<std::string>(); } catch (...) {}
+    try {
+      tech.tetheringPassphrase = value.get<std::string>();
+    } catch (...) {
+    }
   }
 
   // Reuse kTechnologyAdded — the Dart upsert handler fires technologyChanged
@@ -232,11 +251,20 @@ void ConnmanManager::onPropertyChanged(const std::string& name,
   std::scoped_lock lock(obj_tree_mutex_);
 
   if (name == "State") {
-    try { cached_mgr_props_.state = value.get<std::string>(); } catch (...) {}
+    try {
+      cached_mgr_props_.state = value.get<std::string>();
+    } catch (...) {
+    }
   } else if (name == "OfflineMode") {
-    try { cached_mgr_props_.offlineMode = value.get<bool>(); } catch (...) {}
+    try {
+      cached_mgr_props_.offlineMode = value.get<bool>();
+    } catch (...) {
+    }
   } else if (name == "SessionMode") {
-    try { cached_mgr_props_.sessionMode = value.get<bool>(); } catch (...) {}
+    try {
+      cached_mgr_props_.sessionMode = value.get<bool>();
+    } catch (...) {
+    }
   }
 
   post_glaze(kManagerProps, cached_mgr_props_);
@@ -311,7 +339,8 @@ void ConnmanManager::post_glaze(uint8_t discriminator, const T& value) {
 
 // Explicit template instantiations for all posted types.
 template void ConnmanManager::post_glaze(uint8_t, const ConnmanManagerProps&);
-template void ConnmanManager::post_glaze(uint8_t, const ConnmanTechnologyProps&);
+template void ConnmanManager::post_glaze(uint8_t,
+                                         const ConnmanTechnologyProps&);
 template void ConnmanManager::post_glaze(uint8_t, const ConnmanServiceProps&);
 template void ConnmanManager::post_glaze(uint8_t, const ConnmanObjectRemoved&);
 template void ConnmanManager::post_glaze(uint8_t, const ConnmanError&);

@@ -18,7 +18,10 @@ List<int> glazeString(String s) {
   final bytes = s.codeUnits; // ASCII-safe; use utf8.encode for full Unicode
   final len = bytes.length;
   return [
-    len & 0xFF, (len >> 8) & 0xFF, (len >> 16) & 0xFF, (len >> 24) & 0xFF,
+    len & 0xFF,
+    (len >> 8) & 0xFF,
+    (len >> 16) & 0xFF,
+    (len >> 24) & 0xFF,
     ...bytes,
   ];
 }
@@ -47,16 +50,16 @@ void main() {
 
   group('parseConnmanException', () {
     test('InProgress', () {
-      final e = parseConnmanException(
-          'net.connman.Error.InProgress', '/p', 'msg');
+      final e =
+          parseConnmanException('net.connman.Error.InProgress', '/p', 'msg');
       expect(e, isA<ConnmanInProgressException>());
       expect(e.objectPath, '/p');
       expect(e.message, 'msg');
     });
 
     test('AlreadyExists', () {
-      final e = parseConnmanException(
-          'net.connman.Error.AlreadyExists', '/p', 'msg');
+      final e =
+          parseConnmanException('net.connman.Error.AlreadyExists', '/p', 'msg');
       expect(e, isA<ConnmanAlreadyExistsException>());
     });
 
@@ -67,14 +70,14 @@ void main() {
     });
 
     test('NotConnected', () {
-      final e = parseConnmanException(
-          'net.connman.Error.NotConnected', '/p', 'msg');
+      final e =
+          parseConnmanException('net.connman.Error.NotConnected', '/p', 'msg');
       expect(e, isA<ConnmanNotConnectedException>());
     });
 
     test('NotSupported', () {
-      final e = parseConnmanException(
-          'net.connman.Error.NotSupported', '/p', 'msg');
+      final e =
+          parseConnmanException('net.connman.Error.NotSupported', '/p', 'msg');
       expect(e, isA<ConnmanNotSupportedException>());
     });
 
@@ -85,8 +88,7 @@ void main() {
     });
 
     test('Failed', () {
-      final e =
-          parseConnmanException('net.connman.Error.Failed', '/p', 'msg');
+      final e = parseConnmanException('net.connman.Error.Failed', '/p', 'msg');
       expect(e, isA<ConnmanFailedException>());
     });
 
@@ -103,8 +105,8 @@ void main() {
     });
 
     test('NotRegistered', () {
-      final e = parseConnmanException(
-          'net.connman.Error.NotRegistered', '/p', 'msg');
+      final e =
+          parseConnmanException('net.connman.Error.NotRegistered', '/p', 'msg');
       expect(e, isA<ConnmanNotRegisteredException>());
     });
 
@@ -115,8 +117,7 @@ void main() {
     });
 
     test('unknown error name falls back to base ConnmanException', () {
-      final e =
-          parseConnmanException('org.some.Unknown.Error', '/p', 'msg');
+      final e = parseConnmanException('org.some.Unknown.Error', '/p', 'msg');
       expect(e, isA<ConnmanException>());
       expect(e, isNot(isA<ConnmanFailedException>()));
     });
@@ -134,16 +135,16 @@ void main() {
     // ── ConnmanMethodSuccess ──────────────────────────────────────────────
 
     test('decodes ConnmanMethodSuccess via kDone discriminator', () {
-      final decoded = GlazeCodec.decodePayload(
-              msg(MsgTypes.kDone, glazeString('/path')))
-          as ConnmanMethodSuccess;
+      final decoded =
+          GlazeCodec.decodePayload(msg(MsgTypes.kDone, glazeString('/path')))
+              as ConnmanMethodSuccess;
       expect(decoded.objectPath, '/path');
     });
 
     test('decodes ConnmanMethodSuccess with empty path', () {
-      final decoded = GlazeCodec.decodePayload(
-              msg(MsgTypes.kDone, glazeString('')))
-          as ConnmanMethodSuccess;
+      final decoded =
+          GlazeCodec.decodePayload(msg(MsgTypes.kDone, glazeString('')))
+              as ConnmanMethodSuccess;
       expect(decoded.objectPath, isEmpty);
     });
 
@@ -178,8 +179,7 @@ void main() {
       // objectPath: "/p", name: "WiFi", type: "wifi",
       // powered: true, connected: true, tethering: false,
       // tetheringIdentifier: "", tetheringPassphrase: ""
-      final decoded =
-          GlazeCodec.decodePayload(msg(MsgTypes.kTechnologyProps, [
+      final decoded = GlazeCodec.decodePayload(msg(MsgTypes.kTechnologyProps, [
         ...glazeString('/p'),
         ...glazeString('WiFi'),
         ...glazeString('wifi'),
@@ -200,8 +200,7 @@ void main() {
     });
 
     test('kTechnologyAdded uses same TechnologyProps decoder', () {
-      final decoded =
-          GlazeCodec.decodePayload(msg(MsgTypes.kTechnologyAdded, [
+      final decoded = GlazeCodec.decodePayload(msg(MsgTypes.kTechnologyAdded, [
         ...glazeString('/net/connman/technology/ethernet'),
         ...glazeString('Wired'),
         ...glazeString('ethernet'),
@@ -216,8 +215,7 @@ void main() {
     });
 
     test('decodes ConnmanTechnologyProps with tethering fields populated', () {
-      final decoded =
-          GlazeCodec.decodePayload(msg(MsgTypes.kTechnologyProps, [
+      final decoded = GlazeCodec.decodePayload(msg(MsgTypes.kTechnologyProps, [
         ...glazeString('/net/connman/technology/wifi'),
         ...glazeString('WiFi'),
         ...glazeString('wifi'),
@@ -236,8 +234,7 @@ void main() {
 
     test('decodes ConnmanServiceProps', () {
       // strength: 75, security: ["psk"], nameservers: [], domains: []
-      final decoded =
-          GlazeCodec.decodePayload(msg(MsgTypes.kServiceProps, [
+      final decoded = GlazeCodec.decodePayload(msg(MsgTypes.kServiceProps, [
         ...glazeString('/net/connman/service/wifi_home'),
         ...glazeString('HomeNet'),
         ...glazeString('ready'),
@@ -266,8 +263,7 @@ void main() {
     });
 
     test('kServiceChanged uses same ServiceProps decoder', () {
-      final decoded =
-          GlazeCodec.decodePayload(msg(MsgTypes.kServiceChanged, [
+      final decoded = GlazeCodec.decodePayload(msg(MsgTypes.kServiceChanged, [
         ...glazeString('/net/connman/service/wifi_home'),
         ...glazeString('HomeNet'),
         ...glazeString('online'),
@@ -282,15 +278,19 @@ void main() {
       expect(decoded.strength, 90);
     });
 
-    test('decodes ConnmanServiceProps with multiple security methods and nameservers', () {
-      final decoded =
-          GlazeCodec.decodePayload(msg(MsgTypes.kServiceProps, [
+    test(
+        'decodes ConnmanServiceProps with multiple security methods and nameservers',
+        () {
+      final decoded = GlazeCodec.decodePayload(msg(MsgTypes.kServiceProps, [
         ...glazeString('/net/connman/service/wifi_corp'),
         ...glazeString('CorpNet'),
         ...glazeString('ready'),
         ...glazeString('wifi'),
         ...glazeInt16(60),
-        0x01, 0x00, 0x01, 0x00,
+        0x01,
+        0x00,
+        0x01,
+        0x00,
         ...glazeStringList(['ieee8021x', 'wps']),
         ...glazeStringList(['8.8.8.8', '8.8.4.4']),
         ...glazeStringList(['corp.local']),
@@ -301,14 +301,16 @@ void main() {
     });
 
     test('decodes ConnmanServiceProps with negative strength (dBm)', () {
-      final decoded =
-          GlazeCodec.decodePayload(msg(MsgTypes.kServiceProps, [
+      final decoded = GlazeCodec.decodePayload(msg(MsgTypes.kServiceProps, [
         ...glazeString('/p'),
         ...glazeString(''),
         ...glazeString(''),
         ...glazeString(''),
         ...glazeInt16(-42),
-        0x00, 0x00, 0x00, 0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
         ...glazeStringList([]),
         ...glazeStringList([]),
         ...glazeStringList([]),
@@ -319,18 +321,16 @@ void main() {
     // ── ConnmanObjectRemoved ──────────────────────────────────────────────
 
     test('decodes ConnmanObjectRemoved via kServiceRemoved discriminator', () {
-      final decoded = GlazeCodec.decodePayload(
-              msg(MsgTypes.kServiceRemoved,
-                  glazeString('/net/connman/service/x')))
+      final decoded = GlazeCodec.decodePayload(msg(
+              MsgTypes.kServiceRemoved, glazeString('/net/connman/service/x')))
           as ConnmanObjectRemoved;
       expect(decoded.objectPath, '/net/connman/service/x');
     });
 
-    test('decodes ConnmanObjectRemoved via kTechnologyRemoved discriminator', () {
-      final decoded = GlazeCodec.decodePayload(
-              msg(MsgTypes.kTechnologyRemoved,
-                  glazeString('/net/connman/technology/wifi')))
-          as ConnmanObjectRemoved;
+    test('decodes ConnmanObjectRemoved via kTechnologyRemoved discriminator',
+        () {
+      final decoded = GlazeCodec.decodePayload(msg(MsgTypes.kTechnologyRemoved,
+          glazeString('/net/connman/technology/wifi'))) as ConnmanObjectRemoved;
       expect(decoded.objectPath, '/net/connman/technology/wifi');
     });
 
@@ -359,7 +359,8 @@ void main() {
 
     // ── Unknown discriminator ─────────────────────────────────────────────
 
-    test('decodePayload throws UnimplementedError for unknown discriminator', () {
+    test('decodePayload throws UnimplementedError for unknown discriminator',
+        () {
       expect(
         () => GlazeCodec.decodePayload(Uint8List.fromList([0x99])),
         throwsA(isA<UnimplementedError>()),

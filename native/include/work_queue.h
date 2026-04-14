@@ -7,11 +7,11 @@
 
 #pragma once
 
+#include <pthread.h>
 #include <atomic>
 #include <condition_variable>
 #include <functional>
 #include <mutex>
-#include <pthread.h>
 #include <queue>
 #include <thread>
 
@@ -28,7 +28,8 @@ class WorkQueue {
       running_ = false;
     }
     cv_.notify_all();
-    if (thread_.joinable()) thread_.join();
+    if (thread_.joinable())
+      thread_.join();
   }
 
   WorkQueue(const WorkQueue&) = delete;
@@ -57,13 +58,14 @@ class WorkQueue {
         task();  // execute without holding the mutex
         lock.lock();
       }
-      if (!running_) break;
+      if (!running_)
+        break;
     }
   }
 
-  std::atomic<bool>            running_;
-  std::mutex                   mutex_;
-  std::condition_variable      cv_;
+  std::atomic<bool> running_;
+  std::mutex mutex_;
+  std::condition_variable cv_;
   std::queue<std::function<void()>> queue_;
-  std::thread                  thread_;
+  std::thread thread_;
 };

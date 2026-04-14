@@ -159,8 +159,7 @@ class _TechnologyScreenState extends State<TechnologyScreen> {
                       const Spacer(),
                       Icon(
                         _tech.connected ? Icons.check_circle : Icons.cancel,
-                        color:
-                            _tech.connected ? Colors.green : Colors.grey,
+                        color: _tech.connected ? Colors.green : Colors.grey,
                         size: 20,
                       ),
                     ],
@@ -177,8 +176,7 @@ class _TechnologyScreenState extends State<TechnologyScreen> {
 
           // ── Services list header ─────────────────────────────────────────
           Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Row(
               children: [
                 Text(
@@ -191,8 +189,7 @@ class _TechnologyScreenState extends State<TechnologyScreen> {
                       ? const SizedBox(
                           width: 16,
                           height: 16,
-                          child:
-                              CircularProgressIndicator(strokeWidth: 2),
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.refresh, size: 16),
                   label: Text(_scanning ? 'Scanning…' : 'Scan'),

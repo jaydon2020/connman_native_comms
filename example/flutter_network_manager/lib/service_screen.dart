@@ -70,7 +70,10 @@ class _ServiceScreenState extends State<ServiceScreen> {
 
   Future<void> _connect() async {
     if (_isConnecting || _isConnected) return;
-    setState(() { _awaitingConnectAck = true; _userInitiatedDisconnect = false; });
+    setState(() {
+      _awaitingConnectAck = true;
+      _userInitiatedDisconnect = false;
+    });
     try {
       await _svc.connect();
       // Do NOT clear _awaitingConnectAck here — let _onServiceChanged do it

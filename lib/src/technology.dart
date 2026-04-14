@@ -9,7 +9,7 @@ import 'ffi/types.dart';
 class ConnmanTechnology {
   final ConnmanClient client;
   final String objectPath;
-  
+
   String name;
   String type;
   bool powered;
@@ -49,5 +49,6 @@ class ConnmanTechnology {
   }
 
   @override
-  String toString() => 'ConnmanTechnology(\$name, powered: \$powered, connected: \$connected)';
+  String toString() =>
+      'ConnmanTechnology(\$name, powered: \$powered, connected: \$connected)';
 }
