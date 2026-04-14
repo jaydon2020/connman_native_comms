@@ -20,6 +20,10 @@ class ConnmanAlreadyConnectedException extends ConnmanException {
   ConnmanAlreadyConnectedException(super.objectPath, super.message);
 }
 
+class ConnmanAlreadyEnabledException extends ConnmanException {
+  ConnmanAlreadyEnabledException(super.objectPath, super.message);
+}
+
 class ConnmanNotConnectedException extends ConnmanException {
   ConnmanNotConnectedException(super.objectPath, super.message);
 }
@@ -61,6 +65,8 @@ ConnmanException parseConnmanException(
       return ConnmanAlreadyExistsException(objectPath, message);
     case 'net.connman.Error.AlreadyConnected':
       return ConnmanAlreadyConnectedException(objectPath, message);
+    case 'net.connman.Error.AlreadyEnabled':
+      return ConnmanAlreadyEnabledException(objectPath, message);
     case 'net.connman.Error.NotConnected':
       return ConnmanNotConnectedException(objectPath, message);
     case 'net.connman.Error.NotSupported':
