@@ -300,25 +300,68 @@ void ConnmanManager::onServicesChanged(
                                     std::map<std::string, sdbus::Variant>>>&
         changed,
     const std::vector<sdbus::ObjectPath>& removed) {
-  // Build updates outside the lock.
-  std::vector<ConnmanServiceProps> changed_props;
-  changed_props.reserve(changed.size());
-  for (const auto& service : changed) {
-    changed_props.push_back(
-        extract_service_props(service.get<0>(), service.get<1>()));
-  }
-
+  // ConnMan sends PARTIAL property dicts for existing services (only what
+  // changed, e.g. just {"State": "association"}).  A full replace via
+  // extract_service_props() would zero out Type, Strength, etc., causing those
+  // services to vanish from the UI's type-filtered list.  Instead, merge into
+  // the existing record and only replace entirely for brand-new services.
   std::scoped_lock lock(obj_tree_mutex_);
 
-  for (const auto& props : changed_props) {
-    services_[props.objectPath] = props;
-    post_glaze(kServiceChanged, props);
+  for (const auto& svc : changed) {
+    const auto& path    = svc.get<0>();
+    const auto& partial = svc.get<1>();
+
+    auto it = services_.find(path);
+    if (it == services_.end()) {
+      // Brand-new service — extract full props.
+      auto props = extract_service_props(path, partial);
+      services_[path] = props;
+      post_glaze(kServiceChanged, props);
+    } else {
+      // Existing service — merge only the fields present in the partial dict.
+      merge_service_props(it->second, partial);
+      post_glaze(kServiceChanged, it->second);
+    }
   }
 
   for (const auto& path : removed) {
     services_.erase(path);
     post_glaze(kServiceRemoved, ConnmanObjectRemoved{path});
   }
+}
+
+void ConnmanManager::merge_service_props(ConnmanServiceProps& e,
+                                         const PropertiesMap& p) {
+  if (p.count("Name"))
+    e.name        = get_prop<std::string>(p, "Name",  e.name);
+  if (p.count("State"))
+    e.state       = get_prop<std::string>(p, "State", e.state);
+  if (p.count("Type"))
+    e.type        = get_prop<std::string>(p, "Type",  e.type);
+  if (p.count("Strength")) {
+    try {
+      e.strength = static_cast<int16_t>(p.at("Strength").get<uint8_t>());
+    } catch (...) {}
+  }
+  if (p.count("Favorite"))
+    e.favorite    = get_prop<bool>(p, "Favorite",    e.favorite);
+  if (p.count("Immutable"))
+    e.immutable   = get_prop<bool>(p, "Immutable",   e.immutable);
+  if (p.count("AutoConnect"))
+    e.autoConnect = get_prop<bool>(p, "AutoConnect", e.autoConnect);
+  if (p.count("Roaming"))
+    e.roaming     = get_prop<bool>(p, "Roaming",     e.roaming);
+  if (p.count("Security"))
+    e.security    = get_prop<std::vector<std::string>>(p, "Security",
+                                                       e.security);
+  if (p.count("Nameservers"))
+    e.nameservers = get_prop<std::vector<std::string>>(p, "Nameservers",
+                                                       e.nameservers);
+  if (p.count("Domains"))
+    e.domains     = get_prop<std::vector<std::string>>(p, "Domains",
+                                                       e.domains);
+  if (p.count("Error"))
+    e.error       = get_prop<std::string>(p, "Error", e.error);
 }
 
 // ── Dart posting ────────────────────────────────────────────────────────────

@@ -136,6 +136,14 @@ class ConnmanManager : private ConnmanManagerProxyHolder,
   // the mutex (proxy creation involves D-Bus I/O).
   std::unique_ptr<TechWatcher> make_tech_watcher(const std::string& path);
 
+  // Applies a potentially partial ServicesChanged property dict onto an
+  // existing ConnmanServiceProps, updating only fields that are present in
+  // the dict.  ConnMan sends partial dicts for state-only changes (e.g. a
+  // service going idle→association), which would wipe type/strength/etc. if
+  // we used a full extract_service_props() replacement.
+  static void merge_service_props(ConnmanServiceProps& existing,
+                                  const PropertiesMap& partial);
+
   // ── Dart posting helper ─────────────────────────────────────────────────
 
   template <typename T>
