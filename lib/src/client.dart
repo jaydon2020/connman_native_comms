@@ -197,8 +197,14 @@ class ConnmanClient {
 
       case MsgTypes.kError:
         final props = payload as ConnmanError;
-        _pendingMethodCalls.remove(props.objectPath)?.completeError(
-            parseConnmanException(props.name, props.objectPath, props.message));
+        final exception = parseConnmanException(props.name, props.objectPath, props.message);
+        
+        if (props.objectPath == 'net.connman' && _readyCompleter != null) {
+          _readyCompleter!.completeError(exception);
+          _readyCompleter = null;
+        } else {
+          _pendingMethodCalls.remove(props.objectPath)?.completeError(exception);
+        }
         break;
     }
   }
