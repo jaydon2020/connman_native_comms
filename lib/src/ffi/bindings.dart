@@ -60,4 +60,12 @@ class ConnmanBindings {
           Pointer<Utf8>,
           Pointer<Utf8>,
           int)>('connman_service_set_ipv4_config');
+
+  static final agentSetPassphrase = _lib.lookupFunction<
+      Void Function(Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>),
+      void Function(Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>)>('connman_agent_set_passphrase');
+
+  static final agentClearPassphrase = _lib.lookupFunction<
+      Void Function(Pointer<Void>, Pointer<Utf8>),
+      void Function(Pointer<Void>, Pointer<Utf8>)>('connman_agent_clear_passphrase');
 }

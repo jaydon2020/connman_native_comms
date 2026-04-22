@@ -340,4 +340,28 @@ class ConnmanClient {
       }
     });
   }
+
+  // ── Agent Operations ──────────────────────────────────────────────────────
+
+  void agentSetPassphrase(String objectPath, String passphrase) {
+    if (_client == null || _client == nullptr) return;
+    final cPath = objectPath.toNativeUtf8(allocator: calloc);
+    final cPassphrase = passphrase.toNativeUtf8(allocator: calloc);
+    try {
+      ConnmanBindings.agentSetPassphrase(_client!, cPath, cPassphrase);
+    } finally {
+      calloc.free(cPath);
+      calloc.free(cPassphrase);
+    }
+  }
+
+  void agentClearPassphrase(String objectPath) {
+    if (_client == null || _client == nullptr) return;
+    final cPath = objectPath.toNativeUtf8(allocator: calloc);
+    try {
+      ConnmanBindings.agentClearPassphrase(_client!, cPath);
+    } finally {
+      calloc.free(cPath);
+    }
+  }
 }
