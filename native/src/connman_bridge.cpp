@@ -61,7 +61,7 @@ struct BridgeContext {
     // Register the ConnMan Agent
     agent = std::make_unique<ConnmanAgent>(*conn, "/net/connman/native_comms/agent");
     try {
-      auto proxy = sdbus::createProxy(*worker_conn, "net.connman", "/");
+      auto proxy = sdbus::createProxy(*conn, "net.connman", "/");
       proxy->callMethod("RegisterAgent")
            .onInterface("net.connman.Manager")
            .withArguments(agent->get_path());
@@ -76,9 +76,9 @@ struct BridgeContext {
 
   ~BridgeContext() noexcept {
     // 0. Unregister the agent
-    if (worker_conn && agent) {
+    if (conn && agent) {
       try {
-        auto proxy = sdbus::createProxy(*worker_conn, "net.connman", "/");
+        auto proxy = sdbus::createProxy(*conn, "net.connman", "/");
         proxy->callMethod("UnregisterAgent").onInterface("net.connman.Manager").withArguments(agent->get_path());
       } catch (...) {}
     }
