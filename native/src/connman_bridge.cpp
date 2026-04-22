@@ -7,6 +7,7 @@
 
 #include <sdbus-c++/sdbus-c++.h>
 
+#include "connman_agent.h"
 #include "connman_manager.h"
 #include "dart_api_dl.h"
 #include "service_bridge.h"
@@ -28,6 +29,8 @@ struct BridgeContext {
   // Declared before manager and event_loop_thread so it is destroyed (joined)
   // first in the explicit destructor below.
   std::unique_ptr<WorkQueue> work_queue;
+
+  std::unique_ptr<ConnmanAgent> agent;
 
   std::unique_ptr<ConnmanManager> manager;
   std::thread event_loop_thread;
@@ -55,12 +58,32 @@ struct BridgeContext {
       }
     });
 
+    // Register the ConnMan Agent
+    agent = std::make_unique<ConnmanAgent>(*conn, "/net/connman/native_comms/agent");
+    try {
+      auto proxy = sdbus::createProxy(*worker_conn, "net.connman", "/");
+      proxy->callMethod("RegisterAgent")
+           .onInterface("net.connman.Manager")
+           .withArguments(agent->get_path());
+    } catch (const sdbus::Error& error) {
+      std::cerr << "connman_native_comms: Failed to register agent: " << error.what() << "\n";
+    }
+
     // Initial snapshot — fetches all technologies and services, subscribes
     // per-technology PropertyChanged watchers, then posts the snapshot to Dart.
     manager->get_managed_objects();
   }
 
   ~BridgeContext() noexcept {
+    // 0. Unregister the agent
+    if (worker_conn && agent) {
+      try {
+        auto proxy = sdbus::createProxy(*worker_conn, "net.connman", "/");
+        proxy->callMethod("UnregisterAgent").onInterface("net.connman.Manager").withArguments(agent->get_path());
+      } catch (...) {}
+    }
+    agent.reset();
+
     // 1. Drain and join the work queue so no task can outlive worker_conn.
     work_queue.reset();
 
@@ -191,4 +214,28 @@ void connman_service_set_ipv4_config(void* client,
   ServiceBridge::set_ipv4_config(*context->worker_conn, *context->work_queue,
                                  object_path, method, address, netmask, gateway,
                                  result_port);
+}
+
+// ── Agent Operations ────────────────────────────────────────────────────────
+
+void connman_agent_set_passphrase(void* client,
+                                  const char* object_path,
+                                  const char* passphrase) {
+  if (client == nullptr || object_path == nullptr || passphrase == nullptr) {
+    return;
+  }
+  auto* context = static_cast<BridgeContext*>(client);
+  if (context->agent) {
+    context->agent->set_passphrase(object_path, passphrase);
+  }
+}
+
+void connman_agent_clear_passphrase(void* client, const char* object_path) {
+  if (client == nullptr || object_path == nullptr) {
+    return;
+  }
+  auto* context = static_cast<BridgeContext*>(client);
+  if (context->agent) {
+    context->agent->clear_passphrase(object_path);
+  }
 }
