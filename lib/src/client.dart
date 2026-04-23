@@ -279,6 +279,16 @@ class ConnmanClient {
     });
   }
 
+  /// Connects to a secured service by temporarily caching the passphrase in the native agent.
+  Future<void> connectWithPassphrase(String objectPath, String passphrase) async {
+    agentSetPassphrase(objectPath, passphrase);
+    try {
+      await serviceConnect(objectPath);
+    } finally {
+      agentClearPassphrase(objectPath);
+    }
+  }
+
   Future<void> serviceDisconnect(String objectPath) {
     return _dispatch(objectPath, () {
       final cPath = objectPath.toNativeUtf8(allocator: calloc);

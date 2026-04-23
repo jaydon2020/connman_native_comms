@@ -50,6 +50,11 @@ void ConnmanAgent::Release() {
 void ConnmanAgent::ReportError(const sdbus::ObjectPath& path, const std::string& error) {
   std::cerr << "connman_native_comms: Agent ReportError for " << path
             << ": " << error << "\n";
+
+  // If the password is wrong (e.g. "invalid-key"), ConnMan will immediately
+  // ask for it again. We must clear it to avoid an infinite RequestInput loop.
+  // The next request will throw a Canceled error, safely aborting the connection.
+  clear_passphrase(path);
 }
 
 void ConnmanAgent::RequestBrowser(const sdbus::ObjectPath& path, const std::string& url) {
