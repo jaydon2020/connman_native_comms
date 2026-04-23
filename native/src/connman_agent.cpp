@@ -64,8 +64,9 @@ std::map<std::string, sdbus::Variant> ConnmanAgent::RequestInput(
   auto it = passphrases_.find(path);
 
   if (it == passphrases_.end()) {
-    // Throwing an sdbus::Error gracefully translates to a D-Bus error message which tells ConnMan to cancel the attempt.
-    throw sdbus::Error("net.connman.Agent.Error.Canceled", "No passphrase provided for service");
+    // Throw a generic D-Bus error that tells ConnMan to cancel the attempt
+    throw sdbus::Error(sdbus::Error::Name("net.connman.Agent.Error.Canceled"), 
+                       "No passphrase provided for service");
   }
 
   std::map<std::string, sdbus::Variant> response;

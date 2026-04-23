@@ -7,7 +7,9 @@
 
 #include <sdbus-c++/sdbus-c++.h>
 
-class ConnmanAgent {
+#define CONNMAN_NC_EXPORT __attribute__((visibility("default")))
+
+class CONNMAN_NC_EXPORT ConnmanAgent {
  public:
   ConnmanAgent(sdbus::IConnection& conn, sdbus::ObjectPath object_path);
   ~ConnmanAgent();

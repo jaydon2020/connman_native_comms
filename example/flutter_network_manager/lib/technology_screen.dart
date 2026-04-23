@@ -32,6 +32,8 @@ class _TechnologyScreenState extends State<TechnologyScreen> {
   StreamSubscription<ConnmanService>? _svcRemovedSub;
 
   bool _scanning = false;
+  // Track services that are currently connecting or disconnecting
+  final Set<String> _connectingServicePaths = {};
 
   ConnmanTechnology get _tech => widget.technology;
 
@@ -58,6 +60,11 @@ class _TechnologyScreenState extends State<TechnologyScreen> {
     });
     _svcChangedSub = widget.client.serviceChanged.listen((svc) {
       if (!mounted || svc.type != _tech.type) return;
+      // Clear connecting state when service reaches a terminal state
+      const terminalStates = {'online', 'ready', 'idle', 'failure', 'disconnect'};
+      if (terminalStates.contains(svc.state)) {
+        _connectingServicePaths.remove(svc.objectPath);
+      }
       setState(() {});
     });
     _svcRemovedSub = widget.client.serviceRemoved.listen((svc) {
@@ -109,6 +116,42 @@ class _TechnologyScreenState extends State<TechnologyScreen> {
       }
     } finally {
       if (mounted) setState(() => _scanning = false);
+    }
+  }
+
+  Future<void> _connectService(ConnmanService svc) async {
+    final path = svc.objectPath;
+    if (_connectingServicePaths.contains(path)) return;
+
+    setState(() => _connectingServicePaths.add(path));
+    try {
+      await svc.connect();
+    } on ConnmanException catch (e) {
+      if (mounted) {
+        _connectingServicePaths.remove(path);
+        setState(() {});
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(SnackBar(content: Text('Connect failed: ${e.message}')));
+      }
+    }
+  }
+
+  Future<void> _disconnectService(ConnmanService svc) async {
+    final path = svc.objectPath;
+    if (_connectingServicePaths.contains(path)) return;
+
+    setState(() => _connectingServicePaths.add(path));
+    try {
+      await svc.disconnect();
+    } on ConnmanException catch (e) {
+      if (mounted) {
+        _connectingServicePaths.remove(path);
+        setState(() {});
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(SnackBar(content: Text('Disconnect failed: ${e.message}')));
+      }
     }
   }
 
@@ -217,19 +260,15 @@ class _TechnologyScreenState extends State<TechnologyScreen> {
                       final name = svc.name.isNotEmpty ? svc.name : '(hidden)';
                       final isConnected =
                           svc.state == 'online' || svc.state == 'ready';
+                      final isConnecting =
+                          _connectingServicePaths.contains(svc.objectPath);
 
                       return ListTile(
                         dense: true,
                         leading: _strengthIcon(svc.strength),
                         title: Text(name),
                         subtitle: Text(svc.state),
-                        trailing: isConnected
-                            ? const Icon(Icons.check_circle,
-                                color: Colors.green, size: 18)
-                            : Text(
-                                '${svc.strength}',
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
+                        trailing: _buildServiceTrailing(svc, isConnected, isConnecting),
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute<void>(
@@ -252,5 +291,58 @@ class _TechnologyScreenState extends State<TechnologyScreen> {
     if (strength >= 70) return const Icon(Icons.signal_wifi_4_bar, size: 20);
     if (strength >= 40) return const Icon(Icons.network_wifi_3_bar, size: 20);
     return const Icon(Icons.network_wifi_1_bar, size: 20);
+  }
+
+  Widget _buildServiceTrailing(
+    ConnmanService svc,
+    bool isConnected,
+    bool isConnecting,
+  ) {
+    if (isConnecting) {
+      return const SizedBox(
+        width: 24,
+        height: 24,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    }
+
+    if (isConnected) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          const Icon(Icons.check_circle, color: Colors.green, size: 18),
+          const SizedBox(width: 8),
+          FilledButton.tonal(
+            onPressed: () => _disconnectService(svc),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              backgroundColor: Colors.red.shade100,
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('Disconnect', style: TextStyle(fontSize: 11)),
+          ),
+        ],
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        Text(
+          '${svc.strength}',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(width: 8),
+        FilledButton.tonal(
+          onPressed: () => _connectService(svc),
+          style: FilledButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          ),
+          child: const Text('Connect', style: TextStyle(fontSize: 11)),
+        ),
+      ],
+    );
   }
 }

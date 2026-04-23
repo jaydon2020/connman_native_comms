@@ -128,7 +128,7 @@ class _ServiceScreenState extends State<ServiceScreen> {
           const SizedBox(height: 12),
           _buildPropertiesCard(),
           const SizedBox(height: 12),
-          _buildTechnologyTile(),
+          // _buildTechnologyTile(),
         ],
       ),
     );
