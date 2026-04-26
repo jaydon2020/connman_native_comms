@@ -47,11 +47,8 @@ void ConnmanAgent::set_passphrase(const std::string& service_path, const std::st
   auto it = pending_requests_.find(service_path);
   if (it != pending_requests_.end()) {
     std::map<std::string, sdbus::Variant> response;
-    // Essential: ConnMan expects EXACT keys based on the service type
     if (it->second.fields.count("Passphrase")) response["Passphrase"] = sdbus::Variant(passphrase);
     else if (it->second.fields.count("Password")) response["Password"] = sdbus::Variant(passphrase);
-    
-    // Always provide Identity if it's in the requested fields
     if (it->second.fields.count("Identity")) response["Identity"] = sdbus::Variant(std::string("anonymous"));
 
     it->second.result.returnResults(response);
