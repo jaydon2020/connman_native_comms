@@ -39,6 +39,9 @@ class ConnmanClient {
       StreamController<ConnmanService>.broadcast();
   final _serviceRemovedController =
       StreamController<ConnmanService>.broadcast();
+  final _agentRequestInputController = StreamController<String>.broadcast();
+  final _agentReportErrorController =
+      StreamController<(String, String)>.broadcast();
 
   // Pending Futures indexed by object path.
   final _pendingMethodCalls = <String, Completer<void>>{};
@@ -90,6 +93,8 @@ class ConnmanClient {
     await _serviceAddedController.close();
     await _serviceChangedController.close();
     await _serviceRemovedController.close();
+    await _agentRequestInputController.close();
+    await _agentReportErrorController.close();
   }
 
   // ── Accessors ────────────────────────────────────────────────────────────
@@ -107,10 +112,29 @@ class ConnmanClient {
   Stream<ConnmanService> get serviceAdded => _serviceAddedController.stream;
   Stream<ConnmanService> get serviceChanged => _serviceChangedController.stream;
   Stream<ConnmanService> get serviceRemoved => _serviceRemovedController.stream;
+  Stream<String> get agentRequestInput => _agentRequestInputController.stream;
+  Stream<(String, String)> get agentReportError =>
+      _agentReportErrorController.stream;
 
   // ── Message Router ───────────────────────────────────────────────────────
 
   void _handleMessage(dynamic message) {
+    if (message is List) {
+      // Handle agent notifications (posted as Dart_CObject arrays).
+      if (message.length >= 2 && message[0] is String && message[1] is String) {
+        final event = message[0] as String;
+        final path = message[1] as String;
+        if (event == 'AgentRequestInput') {
+          _agentRequestInputController.add(path);
+        } else if (event == 'AgentReportError' &&
+            message.length >= 3 &&
+            message[2] is String) {
+          _agentReportErrorController.add((path, message[2] as String));
+        }
+      }
+      return;
+    }
+
     if (message is! Uint8List) return;
     if (message.isEmpty) return;
 

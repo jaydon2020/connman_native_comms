@@ -30,6 +30,7 @@ class _TechnologyScreenState extends State<TechnologyScreen> {
   StreamSubscription<ConnmanService>? _svcAddedSub;
   StreamSubscription<ConnmanService>? _svcChangedSub;
   StreamSubscription<ConnmanService>? _svcRemovedSub;
+  StreamSubscription<String>? _agentSub;
 
   bool _scanning = false;
   // Track services that are currently connecting or disconnecting
@@ -71,6 +72,62 @@ class _TechnologyScreenState extends State<TechnologyScreen> {
       if (!mounted) return;
       setState(() {});
     });
+
+    _agentSub = widget.client.agentRequestInput.listen(_onAgentRequestInput);
+  }
+
+  void _onAgentRequestInput(String path) {
+    if (!mounted) return;
+    // Only handle if it's a service belonging to this technology
+    final svc = widget.client.services
+        .where((s) => s.objectPath == path && s.type == _tech.type)
+        .firstOrNull;
+    if (svc != null) {
+      _showPassphraseDialog(svc);
+    }
+  }
+
+  Future<void> _showPassphraseDialog(ConnmanService svc) async {
+    final controller = TextEditingController();
+    final passphrase = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Passphrase Required'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Enter passphrase for ${svc.name}:'),
+            TextField(
+              controller: controller,
+              obscureText: true,
+              autofocus: true,
+              decoration: const InputDecoration(hintText: 'Passphrase'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Connect'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+
+    if (passphrase == null) {
+      widget.client.agentClearPassphrase(svc.objectPath);
+      _connectingServicePaths.remove(svc.objectPath);
+      setState(() {});
+    } else {
+      widget.client.agentSetPassphrase(svc.objectPath, passphrase);
+    }
   }
 
   @override
@@ -79,6 +136,7 @@ class _TechnologyScreenState extends State<TechnologyScreen> {
     _svcAddedSub?.cancel();
     _svcChangedSub?.cancel();
     _svcRemovedSub?.cancel();
+    _agentSub?.cancel();
     super.dispose();
   }
 

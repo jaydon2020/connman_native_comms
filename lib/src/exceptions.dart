@@ -48,6 +48,10 @@ class ConnmanOperationTimeoutException extends ConnmanException {
   ConnmanOperationTimeoutException(super.objectPath, super.message);
 }
 
+class ConnmanOperationAbortedException extends ConnmanException {
+  ConnmanOperationAbortedException(super.objectPath, super.message);
+}
+
 class ConnmanPermissionDeniedException extends ConnmanException {
   ConnmanPermissionDeniedException(super.objectPath, super.message);
 }
@@ -83,6 +87,8 @@ ConnmanException parseConnmanException(
       return ConnmanFailedException(objectPath, message);
     case 'net.connman.Error.OperationTimeout':
       return ConnmanOperationTimeoutException(objectPath, message);
+    case 'net.connman.Error.OperationAborted':
+      return ConnmanOperationAbortedException(objectPath, message);
     case 'net.connman.Error.PermissionDenied':
       return ConnmanPermissionDeniedException(objectPath, message);
     case 'net.connman.Error.NotRegistered':

@@ -30,6 +30,7 @@ class _ServiceScreenState extends State<ServiceScreen> {
 
   StreamSubscription<ConnmanService>? _changedSub;
   StreamSubscription<ConnmanTechnology>? _techSub;
+  StreamSubscription<String>? _agentSub;
 
   ConnmanService get _svc => widget.service;
 
@@ -46,6 +47,7 @@ class _ServiceScreenState extends State<ServiceScreen> {
     super.initState();
     _changedSub = widget.client.serviceChanged.listen(_onServiceChanged);
     _techSub = widget.client.technologyChanged.listen(_onTechChanged);
+    _agentSub = widget.client.agentRequestInput.listen(_onAgentRequestInput);
   }
 
   void _onServiceChanged(ConnmanService svc) {
@@ -68,6 +70,53 @@ class _ServiceScreenState extends State<ServiceScreen> {
     }
   }
 
+  void _onAgentRequestInput(String path) {
+    if (!mounted || path != _svc.objectPath) return;
+    _showPassphraseDialog();
+  }
+
+  Future<void> _showPassphraseDialog() async {
+    final controller = TextEditingController();
+    final passphrase = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Passphrase Required'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Enter passphrase for ${_svc.name}:'),
+            TextField(
+              controller: controller,
+              obscureText: true,
+              autofocus: true,
+              decoration: const InputDecoration(hintText: 'Passphrase'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Connect'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+
+    if (passphrase == null) {
+      widget.client.agentClearPassphrase(_svc.objectPath);
+      setState(() => _awaitingConnectAck = false);
+    } else {
+      widget.client.agentSetPassphrase(_svc.objectPath, passphrase);
+    }
+  }
+
   Future<void> _connect() async {
     if (_isConnecting || _isConnected) return;
     setState(() {
@@ -80,7 +129,11 @@ class _ServiceScreenState extends State<ServiceScreen> {
       // when ConnMan reports a terminal state (online/ready/failure/idle).
     } on ConnmanException catch (e) {
       if (mounted) {
-        setState(() => _awaitingConnectAck = false);
+        setState(() {
+          _awaitingConnectAck = false;
+          // If we get an immediate error, ensure the service object reflects it
+          _svc.state = 'failure';
+        });
         _showSnackBar('Connect failed: ${e.message}');
       }
     }
@@ -109,6 +162,7 @@ class _ServiceScreenState extends State<ServiceScreen> {
   void dispose() {
     _changedSub?.cancel();
     _techSub?.cancel();
+    _agentSub?.cancel();
     super.dispose();
   }
 
