@@ -47,21 +47,39 @@ Future<void> main(List<String> args) async {
   print('Connecting to ${service.name} (${service.objectPath})...');
 
   try {
-    // Attempt connection
-    await service.connect();
-    
+    // Check if already connected
+    if (service.state == 'online' || service.state == 'ready') {
+      print('  -> State: ${service.state} (already connected)');
+      print('\nSUCCESS: Connected to $ssid');
+      await client.close();
+      return;
+    }
+
     // Track state until success or failure
     final completer = Completer<void>();
-    final sub = client.serviceChanged.listen((svc) {
+    late StreamSubscription<ConnmanService> sub;
+    
+    // Set up listener BEFORE calling connect to avoid race conditions
+    sub = client.serviceChanged.listen((svc) {
       if (svc.objectPath == service!.objectPath) {
         print('  -> State: ${svc.state}');
-        if (svc.state == 'online' || svc.state == 'ready') completer.complete();
-        else if (svc.state == 'failure') completer.completeError(svc.error);
+        if (svc.state == 'online' || svc.state == 'ready') {
+          completer.complete();
+        } else if (svc.state == 'failure') {
+          completer.completeError(svc.error ?? 'Connection failed with no error details');
+        }
       }
     });
 
+    // Now attempt connection after listener is ready
+    await service.connect();
+    
+    // Wait for connection to complete with timeout
     await completer.future.timeout(const Duration(seconds: 60));
     print('\nSUCCESS: Connected to $ssid');
+    
+    // Clean up the listener
+    await sub.cancel();
   } catch (e) {
     print('\nFAILED: $e');
     print('If it aborted, try removing the service first: connmanctl remove ${service.objectPath}');

@@ -64,7 +64,18 @@ class ConnmanService {
       await client.serviceConnect(objectPath);
     } on ConnmanInProgressException {
       // Already connecting — this is fine, we'll wait for the signals.
+    } on ConnmanAlreadyConnectedException {
+      // Already connected — this is fine, nothing more to do.
+    } on ConnmanOperationAbortedException {
+      // Operation was aborted (possibly by a concurrent request or network issue),
+      // but we should wait for state signals to see the final outcome.
+    } on ConnmanFailedException {
+      // Connection failed, but state tracking will capture the reason via the error property.
+    } on ConnmanNotConnectedException {
+      // Service is in wrong state, but state tracking will show current state.
     }
+    // Other exceptions (NotSupported, InvalidArguments, etc.) propagate to caller
+    // as they indicate fundamental issues that won't be resolved by state tracking.
   }
 
   Future<void> disconnect() async {
