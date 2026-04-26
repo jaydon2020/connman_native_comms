@@ -108,21 +108,36 @@ class _TechnologyScreenState extends State<TechnologyScreen> {
   }
 
   Future<void> _showPassphraseDialog(ConnmanService svc) async {
-    final controller = TextEditingController();
-    final passphrase = await showDialog<String>(
+    final passController = TextEditingController();
+    final identityController = TextEditingController(text: 'anonymous');
+    
+    final result = await showDialog<(String, String)>(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text('Passphrase Required'),
+        title: const Text('Authentication Required'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Enter passphrase for ${svc.name}:'),
+            Text('Connecting to ${svc.name}'),
+            const SizedBox(height: 16),
             TextField(
-              controller: controller,
+              controller: identityController,
+              decoration: const InputDecoration(
+                labelText: 'Identity (optional)',
+                hintText: 'anonymous',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: passController,
               obscureText: true,
               autofocus: true,
-              decoration: const InputDecoration(hintText: 'Passphrase'),
+              decoration: const InputDecoration(
+                labelText: 'Passphrase',
+                border: OutlineInputBorder(),
+              ),
             ),
           ],
         ),
@@ -131,8 +146,8 @@ class _TechnologyScreenState extends State<TechnologyScreen> {
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, controller.text),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, (identityController.text, passController.text)),
             child: const Text('Connect'),
           ),
         ],
@@ -141,12 +156,12 @@ class _TechnologyScreenState extends State<TechnologyScreen> {
 
     if (!mounted) return;
 
-    if (passphrase == null) {
+    if (result == null) {
       widget.client.agentClearPassphrase(svc.objectPath);
       _connectingServicePaths.remove(svc.objectPath);
       setState(() {});
     } else {
-      widget.client.agentSetPassphrase(svc.objectPath, passphrase);
+      widget.client.agentSetPassphrase(svc.objectPath, result.$2);
     }
   }
 

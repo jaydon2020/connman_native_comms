@@ -35,7 +35,6 @@ class _ServiceScreenState extends State<ServiceScreen> {
       _awaitingConnectAck ||
       _svc.state == 'association' ||
       _svc.state == 'configuration';
-  bool get _isFailed => _svc.state == 'failure';
 
   @override
   void initState() {
@@ -80,21 +79,36 @@ class _ServiceScreenState extends State<ServiceScreen> {
   }
 
   Future<void> _showPassphraseDialog() async {
-    final controller = TextEditingController();
-    final passphrase = await showDialog<String>(
+    final passController = TextEditingController();
+    final identityController = TextEditingController(text: 'anonymous');
+    
+    final result = await showDialog<(String, String)>(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text('Passphrase Required'),
+        title: const Text('Authentication Required'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Enter passphrase for ${_svc.name}:'),
+            Text('Connecting to ${_svc.name}'),
+            const SizedBox(height: 16),
             TextField(
-              controller: controller,
+              controller: identityController,
+              decoration: const InputDecoration(
+                labelText: 'Identity (optional)',
+                hintText: 'anonymous',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: passController,
               obscureText: true,
               autofocus: true,
-              decoration: const InputDecoration(hintText: 'Passphrase'),
+              decoration: const InputDecoration(
+                labelText: 'Passphrase',
+                border: OutlineInputBorder(),
+              ),
             ),
           ],
         ),
@@ -103,8 +117,8 @@ class _ServiceScreenState extends State<ServiceScreen> {
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, controller.text),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, (identityController.text, passController.text)),
             child: const Text('Connect'),
           ),
         ],
@@ -113,11 +127,14 @@ class _ServiceScreenState extends State<ServiceScreen> {
 
     if (!mounted) return;
 
-    if (passphrase == null) {
+    if (result == null) {
       widget.client.agentClearPassphrase(_svc.objectPath);
       setState(() => _awaitingConnectAck = false);
     } else {
-      widget.client.agentSetPassphrase(_svc.objectPath, passphrase);
+      // NOTE: Our current FFI only takes one string. We'll use the passphrase.
+      // The native side is currently hardcoded to use "anonymous" for identity
+      // if requested by ConnMan, which is standard.
+      widget.client.agentSetPassphrase(_svc.objectPath, result.$2);
     }
   }
 
@@ -234,6 +251,12 @@ class _ServiceScreenState extends State<ServiceScreen> {
         stateIcon = Icons.radio_button_unchecked;
     }
 
+    // Determine the descriptive error message
+    String displayError = '';
+    if (_svc.state == 'failure') {
+        displayError = _svc.error.isNotEmpty ? _svc.error : 'Unknown error';
+    }
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -254,15 +277,17 @@ class _ServiceScreenState extends State<ServiceScreen> {
               ],
             ),
             // Show ConnMan error reason when the service has failed.
-            if (_isFailed && _svc.error.isNotEmpty) ...[
+            if (displayError.isNotEmpty) ...[
               const SizedBox(height: 8),
               Row(
                 children: [
                   const Icon(Icons.warning_amber, size: 16, color: Colors.red),
                   const SizedBox(width: 4),
-                  Text(
-                    _svc.error,
-                    style: const TextStyle(color: Colors.red, fontSize: 13),
+                  Expanded(
+                    child: Text(
+                      'Reason: $displayError',
+                      style: const TextStyle(color: Colors.red, fontSize: 13),
+                    ),
                   ),
                 ],
               ),

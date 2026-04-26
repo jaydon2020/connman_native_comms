@@ -5,6 +5,7 @@
 #include "dart_api_dl.h"
 
 static constexpr auto kAgentInterface = "net.connman.Agent";
+static constexpr auto kLegacyAgentInterface = "org.moblin.connman.Agent";
 
 // Helper to send Dart array messages, e.g. ["AgentReportError", "/path", "error"]
 static void notify_dart(int64_t port, const std::string& event,
@@ -48,31 +49,51 @@ ConnmanAgent::ConnmanAgent(sdbus::IConnection& conn,
                            sdbus::ObjectPath object_path,
                            int64_t events_port)
     : object_path_(std::move(object_path)), events_port_(events_port) {
+  std::cout << "connman_native_comms: Creating Agent at " << object_path_ << "\n";
   object_ = sdbus::createObject(conn, object_path_);
 
-  // Dynamically export the D-Bus Agent interface on our provided connection
-  object_->addVTable(
-      sdbus::registerMethod("Release")
-          .implementedAs([this]() { this->release(); }),
-      sdbus::registerMethod("ReportError")
+  // Register modern interface
+  auto vtable = sdbus::registerMethod("Release")
+          .implementedAs([this]() { this->release(); });
+  vtable.registerMethod("ReportError")
           .implementedAs([this](const sdbus::ObjectPath& path,
                                 const std::string& error) {
             this->report_error(path, error);
-          }),
-      sdbus::registerMethod("RequestBrowser")
+          });
+  vtable.registerMethod("RequestBrowser")
           .implementedAs([this](const sdbus::ObjectPath& path,
                                 const std::string& url) {
             this->request_browser(path, url);
-          }),
-      sdbus::registerMethod("RequestInput")
+          });
+  vtable.registerMethod("RequestInput")
           .implementedAs([this](sdbus::Result<std::map<std::string, sdbus::Variant>>&& result,
                                 sdbus::ObjectPath path,
                                 std::map<std::string, sdbus::Variant> fields) {
             this->request_input(std::move(result), std::move(path), std::move(fields));
-          }),
-      sdbus::registerMethod("Cancel")
-          .implementedAs([this]() { this->cancel(); })
-  ).forInterface(kAgentInterface);
+          });
+  vtable.registerMethod("Cancel")
+          .implementedAs([this]() { this->cancel(); });
+
+  object_->addVTable(std::move(vtable)).forInterface(kAgentInterface);
+
+  // Also register legacy interface for maximum compatibility
+  auto legacyVTable = sdbus::registerMethod("Release")
+          .implementedAs([this]() { this->release(); });
+  legacyVTable.registerMethod("ReportError")
+          .implementedAs([this](const sdbus::ObjectPath& path,
+                                const std::string& error) {
+            this->report_error(path, error);
+          });
+  legacyVTable.registerMethod("RequestInput")
+          .implementedAs([this](sdbus::Result<std::map<std::string, sdbus::Variant>>&& result,
+                                sdbus::ObjectPath path,
+                                std::map<std::string, sdbus::Variant> fields) {
+            this->request_input(std::move(result), std::move(path), std::move(fields));
+          });
+  legacyVTable.registerMethod("Cancel")
+          .implementedAs([this]() { this->cancel(); });
+
+  object_->addVTable(std::move(legacyVTable)).forInterface(kLegacyAgentInterface);
 }
 
 ConnmanAgent::~ConnmanAgent() = default;
@@ -87,14 +108,12 @@ void ConnmanAgent::set_passphrase(const std::string& service_path,
   auto it = pending_requests_.find(service_path);
   if (it != pending_requests_.end()) {
     std::map<std::string, sdbus::Variant> response;
-    // Check which fields were requested and fulfill them
     if (it->second.fields.find("Passphrase") != it->second.fields.end()) {
       response["Passphrase"] = sdbus::Variant(passphrase);
     } else if (it->second.fields.find("Password") != it->second.fields.end()) {
       response["Password"] = sdbus::Variant(passphrase);
     }
 
-    // Some networks might also require an Identity field
     if (it->second.fields.find("Identity") != it->second.fields.end()) {
       response["Identity"] = sdbus::Variant(std::string("anonymous"));
     }
