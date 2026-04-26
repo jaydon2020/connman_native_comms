@@ -73,7 +73,8 @@ void ServiceBridge::connect(sdbus::IConnection& conn,
       auto proxy = sdbus::createProxy(conn, sdbus::ServiceName(kConnmanService),
                                       sdbus::ObjectPath(object_path));
       ServiceProxy client(*proxy);
-      client.Connect();
+      // Increased timeout to 60 seconds for slow RPi connections
+      proxy->callMethod("Connect").onInterface("net.connman.Service").withTimeout(60000000);
       post_success(result_port, object_path);
     } catch (const sdbus::Error& error) {
       post_error(result_port, object_path, error.getName(), error.getMessage());

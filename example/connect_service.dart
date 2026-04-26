@@ -23,14 +23,14 @@ Future<void> main(List<String> args) async {
   
   // Listen for passphrase requests BEFORE connecting.
   client.agentRequestInput.listen((path) {
-    print('\n[Agent] Passphrase requested for $path');
-    stdout.write('Enter password: ');
+    print('\n[Agent] AUTHENTICATION REQUIRED for $path');
+    stdout.write('Enter WiFi Password: ');
     final pass = stdin.readLineSync() ?? '';
     client.agentSetPassphrase(path, pass);
   });
 
   client.agentReportError.listen((error) {
-    print('\n[Agent] Error for ${error.$1}: ${error.$2}');
+    print('\n[Agent] AUTH ERROR for ${error.$1}: ${error.$2}');
   });
 
   try {
@@ -50,29 +50,54 @@ Future<void> main(List<String> args) async {
   if (!wifi.powered) {
     print('Powering on WiFi...');
     await wifi.setPowered(true);
-    await Future<void>.delayed(const Duration(milliseconds: 500));
+    await Future<void>.delayed(const Duration(seconds: 1));
   }
 
-  // 1. Clear any stale state for this SSID.
-  final existing = client.services.where((s) => s.name == ssid).toList();
-  for (final s in existing) {
-    print('Removing stale service record for "${s.name}" (${s.objectPath})...');
-    final removed = Completer<void>();
-    final sub = client.serviceRemoved.listen((rs) {
-      if (rs.objectPath == s.objectPath) removed.complete();
-    });
-    try {
-      await s.remove();
-      await removed.future.timeout(const Duration(seconds: 2));
-    } catch (_) {} finally {
-      await sub.cancel();
+  // 1. FORCED PURGE: Remove any existing record for this SSID to clear bad passwords.
+  var existing = client.services.where((s) => s.name == ssid).toList();
+  if (existing.isNotEmpty) {
+    for (final s in existing) {
+      print('Purging stale profile for "${s.name}" (${s.objectPath})...');
+      
+      final removed = Completer<void>();
+      final sub = client.serviceRemoved.listen((rs) {
+        if (rs.objectPath == s.objectPath) removed.complete();
+      });
+      
+      try {
+        await s.remove();
+        await removed.future.timeout(const Duration(seconds: 5));
+        print('  Profile cleared.');
+      } catch (e) {
+        print('  Warning: profile clear timed out (continuing anyway).');
+      } finally {
+        await sub.cancel();
+      }
     }
+    
+    // Give ConnMan a moment to settle
+    await Future<void>.delayed(const Duration(seconds: 1));
   }
 
-  // 2. Scan and find the fresh service object.
-  final service = await findService(client, wifi, ssid: ssid, timeout: timeout);
+  // 2. FRESH SCAN: Find the service object after the purge.
+  print('Scanning for fresh service object...');
+  await wifi.scan();
+  
+  ConnmanService? service;
+  try {
+    service = await client.serviceAdded
+        .where((s) => s.name == ssid && s.type == 'wifi')
+        .first
+        .timeout(timeout);
+  } on TimeoutException {
+    // Check if it's already there but we missed the signal
+    service = client.services
+      .where((s) => s.name == ssid && s.type == 'wifi')
+      .firstOrNull;
+  }
+
   if (service == null) {
-    print('Service "$ssid" not found after scan.');
+    print('Service "$ssid" not found after purge and scan.');
     await client.close();
     return;
   }
@@ -80,15 +105,15 @@ Future<void> main(List<String> args) async {
   print('Connecting to "${service.name}" (${service.objectPath})...');
 
   try {
-    // 3. Initiate connection.
+    // 3. Initiate connection (native timeout is now 60s).
     await service.connect();
     
     // 4. Wait for completion signals.
-    print('Waiting for connection to complete...');
+    print('Waiting for D-Bus signals (this may take up to 60 seconds)...');
     final completer = Completer<void>();
     final sub = client.serviceChanged.listen((svc) {
-      if (svc.objectPath == service.objectPath) {
-        print('  Current state: ${svc.state}');
+      if (svc.objectPath == service!.objectPath) {
+        print('  Status Update: ${svc.state} ${svc.error.isNotEmpty ? "(Error: ${svc.error})" : ""}');
         if (svc.state == 'online' || svc.state == 'ready') {
           completer.complete();
         } else if (svc.state == 'failure') {
@@ -98,24 +123,18 @@ Future<void> main(List<String> args) async {
     });
 
     try {
-      await completer.future.timeout(const Duration(seconds: 45));
-      print('\nConnected successfully!');
+      await completer.future.timeout(const Duration(seconds: 65));
+      print('\nSUCCESS: Connected successfully!');
     } finally {
       await sub.cancel();
     }
   } on ConnmanOperationAbortedException {
-    print('\nConnection aborted by ConnMan. This usually means the agent was not ready.');
+    print('\nERROR: Connection aborted. Check if the password is correct or if another manager is fighting for WiFi.');
   } on TimeoutException {
-    print('\nConnection timed out.');
+    print('\nERROR: Connection timed out.');
   } on ConnmanException catch (e) {
-    print('\nConnection failed: $e');
+    print('\nERROR: Connection failed: $e');
   }
-
-  print('\nFinal Service Properties:');
-  print('  State:       ${service.state}');
-  print('  Type:        ${service.type}');
-  print('  Security:    ${service.security}');
-  print('  Strength:    ${service.strength}');
 
   await client.close();
   print('\nDone.');
