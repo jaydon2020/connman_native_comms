@@ -50,15 +50,20 @@ Future<void> main(List<String> args) async {
   if (!wifi.powered) {
     print('Powering on WiFi...');
     await wifi.setPowered(true);
-    await Future<void>.delayed(const Duration(seconds: 1));
+    await Future<void>.delayed(const Duration(seconds: 2));
   }
 
-  // 1. FORCED PURGE: Remove any existing record for this SSID to clear bad passwords.
+  // 1. FORCE RESET: Disconnect and Purge any existing record for this SSID.
   var existing = client.services.where((s) => s.name == ssid).toList();
   if (existing.isNotEmpty) {
     for (final s in existing) {
-      print('Purging stale profile for "${s.name}" (${s.objectPath})...');
+      print('Resetting stale profile for "${s.name}" (${s.objectPath})...');
       
+      try {
+        // Disconnect first to break any hardware locks
+        await s.disconnect().timeout(const Duration(seconds: 5));
+      } catch (_) {}
+
       final removed = Completer<void>();
       final sub = client.serviceRemoved.listen((rs) {
         if (rs.objectPath == s.objectPath) removed.complete();
@@ -66,50 +71,54 @@ Future<void> main(List<String> args) async {
       
       try {
         await s.remove();
-        await removed.future.timeout(const Duration(seconds: 5));
-        print('  Profile cleared.');
+        // Increased purge wait to 10s for slow Pis
+        await removed.future.timeout(const Duration(seconds: 10));
+        print('  Profile fully cleared from ConnMan.');
       } catch (e) {
-        print('  Warning: profile clear timed out (continuing anyway).');
+        print('  Warning: profile clear timed out or failed ($e). Continuing...');
       } finally {
         await sub.cancel();
       }
     }
     
-    // Give ConnMan a moment to settle
-    await Future<void>.delayed(const Duration(seconds: 1));
+    // Crucial: Wait for ConnMan to settle after the purge
+    await Future<void>.delayed(const Duration(seconds: 2));
   }
 
-  // 2. FRESH SCAN: Find the service object after the purge.
-  print('Scanning for fresh service object...');
+  // 2. FRESH SCAN: Force a scan to find the "new" service object.
+  print('Requesting fresh WiFi scan...');
   await wifi.scan();
   
-  ConnmanService? service;
-  try {
-    service = await client.serviceAdded
-        .where((s) => s.name == ssid && s.type == 'wifi')
-        .first
-        .timeout(timeout);
-  } on TimeoutException {
-    // Check if it's already there but we missed the signal
-    service = client.services
+  // Wait a moment for scan results to propagate to services list
+  await Future<void>.delayed(const Duration(seconds: 2));
+
+  print('Searching for "$ssid"...');
+  ConnmanService? service = client.services
       .where((s) => s.name == ssid && s.type == 'wifi')
       .firstOrNull;
-  }
 
   if (service == null) {
-    print('Service "$ssid" not found after purge and scan.');
-    await client.close();
-    return;
+    print('Service "$ssid" still not visible. Waiting for signal...');
+    try {
+      service = await client.serviceAdded
+          .where((s) => s.name == ssid && s.type == 'wifi')
+          .first
+          .timeout(timeout);
+    } on TimeoutException {
+      print('ERROR: Service "$ssid" not found after reset and scan.');
+      await client.close();
+      return;
+    }
   }
 
   print('Connecting to "${service.name}" (${service.objectPath})...');
 
   try {
-    // 3. Initiate connection (native timeout is now 60s).
+    // 3. Initiate connection (native timeout is 60s).
     await service.connect();
     
     // 4. Wait for completion signals.
-    print('Waiting for D-Bus signals (this may take up to 60 seconds)...');
+    print('Waiting for D-Bus handshake (up to 60 seconds)...');
     final completer = Completer<void>();
     final sub = client.serviceChanged.listen((svc) {
       if (svc.objectPath == service!.objectPath) {
@@ -124,14 +133,14 @@ Future<void> main(List<String> args) async {
 
     try {
       await completer.future.timeout(const Duration(seconds: 65));
-      print('\nSUCCESS: Connected successfully!');
+      print('\nSUCCESS: WiFi connected!');
     } finally {
       await sub.cancel();
     }
   } on ConnmanOperationAbortedException {
-    print('\nERROR: Connection aborted. Check if the password is correct or if another manager is fighting for WiFi.');
+    print('\nERROR: Connection aborted. This happens if the password is wrong or another network manager (like wpa_supplicant directly) is fighting ConnMan.');
   } on TimeoutException {
-    print('\nERROR: Connection timed out.');
+    print('\nERROR: Handshake timed out.');
   } on ConnmanException catch (e) {
     print('\nERROR: Connection failed: $e');
   }

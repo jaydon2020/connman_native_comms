@@ -91,7 +91,8 @@ void ServiceBridge::disconnect(sdbus::IConnection& conn,
       auto proxy = sdbus::createProxy(conn, sdbus::ServiceName(kConnmanService),
                                       sdbus::ObjectPath(object_path));
       ServiceProxy client(*proxy);
-      client.Disconnect();
+      // 60s timeout
+      proxy->callMethod("Disconnect").onInterface("net.connman.Service").withTimeout(60000000);
       post_success(result_port, object_path);
     } catch (const sdbus::Error& error) {
       post_error(result_port, object_path, error.getName(), error.getMessage());
@@ -100,22 +101,22 @@ void ServiceBridge::disconnect(sdbus::IConnection& conn,
 }
 
 void ServiceBridge::remove(sdbus::IConnection& conn,
-                           WorkQueue& queue,
-                           const std::string& object_path,
-                           Dart_Port_DL result_port) {
+                            WorkQueue& queue,
+                            const std::string& object_path,
+                            Dart_Port_DL result_port) {
   queue.enqueue([&conn, object_path, result_port] {
     try {
       auto proxy = sdbus::createProxy(conn, sdbus::ServiceName(kConnmanService),
                                       sdbus::ObjectPath(object_path));
       ServiceProxy client(*proxy);
-      client.Remove();
+      // 60s timeout
+      proxy->callMethod("Remove").onInterface("net.connman.Service").withTimeout(60000000);
       post_success(result_port, object_path);
     } catch (const sdbus::Error& error) {
       post_error(result_port, object_path, error.getName(), error.getMessage());
     }
   });
 }
-
 void ServiceBridge::set_auto_connect(sdbus::IConnection& conn,
                                      WorkQueue& queue,
                                      const std::string& object_path,

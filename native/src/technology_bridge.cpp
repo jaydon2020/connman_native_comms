@@ -90,7 +90,8 @@ void TechnologyBridge::scan(sdbus::IConnection& conn,
       auto proxy = sdbus::createProxy(conn, sdbus::ServiceName(kConnmanService),
                                       sdbus::ObjectPath(object_path));
       TechnologyProxy client(*proxy);
-      client.Scan();
+      // 60s timeout
+      proxy->callMethod("Scan").onInterface("net.connman.Technology").withTimeout(60000000);
       post_success(result_port, object_path);
     } catch (const sdbus::Error& error) {
       post_error(result_port, object_path, error.getName(), error.getMessage());
