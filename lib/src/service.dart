@@ -4,6 +4,7 @@
 import 'package:meta/meta.dart';
 
 import 'client.dart';
+import 'exceptions.dart';
 import 'ffi/types.dart';
 
 class ConnmanService {
