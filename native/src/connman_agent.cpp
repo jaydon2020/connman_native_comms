@@ -65,6 +65,7 @@ ConnmanAgent::ConnmanAgent(sdbus::IConnection& conn,
             this->request_browser(path, url);
           }),
       sdbus::registerMethod("RequestInput")
+          .withAsyncReply()
           .implementedAs([this](sdbus::Result<std::map<std::string, sdbus::Variant>>&& result,
                                 sdbus::ObjectPath path,
                                 std::map<std::string, sdbus::Variant> fields) {

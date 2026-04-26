@@ -17,13 +17,10 @@
 // ── Bridge Context ──────────────────────────────────────────────────────────
 
 struct BridgeContext {
-  // conn — owned by the sdbus event loop thread (signals, Manager proxy).
+  // conn — shared by the sdbus event loop thread (signals, Manager proxy)
+  // and the worker thread (one-shot method calls: SetPowered, Scan, Connect, …).
+  // sdbus-cpp v2 is thread-safe for concurrent method calls on a shared connection.
   std::unique_ptr<sdbus::IConnection> conn;
-
-  // worker_conn — owned exclusively by WorkQueue's worker thread (one-shot
-  // method calls: SetPowered, Scan, Connect, …).  Separate connection so
-  // event-loop thread and worker thread never share a connection.
-  std::unique_ptr<sdbus::IConnection> worker_conn;
 
   // Serialises all one-shot method calls on a single background thread.
   // Declared before manager and event_loop_thread so it is destroyed (joined)
@@ -37,17 +34,10 @@ struct BridgeContext {
 
   explicit BridgeContext(int64_t events_port) {
     conn = sdbus::createSystemBusConnection();
-    worker_conn = sdbus::createSystemBusConnection();
     work_queue = std::make_unique<WorkQueue>();
     manager = std::make_unique<ConnmanManager>(*conn, events_port);
 
     // Start the event loop BEFORE taking the snapshot (C-2).
-    // sdbus-cpp v2 is thread-safe for concurrent method calls, so
-    // get_managed_objects() can make blocking D-Bus calls while
-    // enterEventLoop() is running on a separate thread.  Starting first
-    // ensures that any signals emitted during the snapshot D-Bus calls are
-    // already buffered by the running loop and delivered after
-    // get_managed_objects() releases obj_tree_mutex_.
     event_loop_thread = std::thread([this]() {
       pthread_setname_np(pthread_self(), "connman_sdbus");
       try {
@@ -79,7 +69,6 @@ struct BridgeContext {
       if (event_loop_thread.joinable()) {
         event_loop_thread.join();
       }
-      // Fail bridge creation, rethrow to be caught by connman_client_create
       throw;
     }
 
@@ -103,7 +92,7 @@ struct BridgeContext {
     }
     agent.reset();
 
-    // 1. Drain and join the work queue so no task can outlive worker_conn.
+    // 1. Drain and join the work queue.
     work_queue.reset();
 
     // 2. Signal the event loop to exit and wait for it to finish.
@@ -117,8 +106,7 @@ struct BridgeContext {
     // 3. Destroy manager (removes signal handlers and TechWatchers).
     manager.reset();
 
-    // 4. Close connections last.
-    worker_conn.reset();
+    // 4. Close connection last.
     conn.reset();
   }
 };
@@ -155,7 +143,7 @@ void connman_technology_set_powered(void* client,
     return;
   }
   auto* context = static_cast<BridgeContext*>(client);
-  TechnologyBridge::set_powered(*context->worker_conn, *context->work_queue,
+  TechnologyBridge::set_powered(*context->conn, *context->work_queue,
                                 object_path, powered, result_port);
 }
 
@@ -166,7 +154,7 @@ void connman_technology_scan(void* client,
     return;
   }
   auto* context = static_cast<BridgeContext*>(client);
-  TechnologyBridge::scan(*context->worker_conn, *context->work_queue,
+  TechnologyBridge::scan(*context->conn, *context->work_queue,
                          object_path, result_port);
 }
 
@@ -179,7 +167,7 @@ void connman_service_connect(void* client,
     return;
   }
   auto* context = static_cast<BridgeContext*>(client);
-  ServiceBridge::connect(*context->worker_conn, *context->work_queue,
+  ServiceBridge::connect(*context->conn, *context->work_queue,
                          object_path, result_port);
 }
 
@@ -190,7 +178,7 @@ void connman_service_disconnect(void* client,
     return;
   }
   auto* context = static_cast<BridgeContext*>(client);
-  ServiceBridge::disconnect(*context->worker_conn, *context->work_queue,
+  ServiceBridge::disconnect(*context->conn, *context->work_queue,
                             object_path, result_port);
 }
 
@@ -201,7 +189,7 @@ void connman_service_remove(void* client,
     return;
   }
   auto* context = static_cast<BridgeContext*>(client);
-  ServiceBridge::remove(*context->worker_conn, *context->work_queue,
+  ServiceBridge::remove(*context->conn, *context->work_queue,
                         object_path, result_port);
 }
 
@@ -213,7 +201,7 @@ void connman_service_set_auto_connect(void* client,
     return;
   }
   auto* context = static_cast<BridgeContext*>(client);
-  ServiceBridge::set_auto_connect(*context->worker_conn, *context->work_queue,
+  ServiceBridge::set_auto_connect(*context->conn, *context->work_queue,
                                   object_path, auto_connect, result_port);
 }
 
@@ -230,7 +218,7 @@ void connman_service_set_ipv4_config(void* client,
   }
 
   auto* context = static_cast<BridgeContext*>(client);
-  ServiceBridge::set_ipv4_config(*context->worker_conn, *context->work_queue,
+  ServiceBridge::set_ipv4_config(*context->conn, *context->work_queue,
                                  object_path, method, address, netmask, gateway,
                                  result_port);
 }

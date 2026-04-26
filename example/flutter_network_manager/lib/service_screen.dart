@@ -3,8 +3,6 @@ import 'dart:async';
 import 'package:connman_native_comms/connman_native_comms.dart';
 import 'package:flutter/material.dart';
 
-import 'technology_screen.dart';
-
 class ServiceScreen extends StatefulWidget {
   final ConnmanClient client;
   final ConnmanService service;
@@ -23,10 +21,6 @@ class _ServiceScreenState extends State<ServiceScreen> {
   // True while a connect() D-Bus call is in-flight (before ConnMan acks it).
   // After ack, _svc.state drives the UI (association → configuration → online).
   bool _awaitingConnectAck = false;
-
-  // Set to true when the user taps Disconnect so that going idle doesn't
-  // pop the screen unexpectedly (we stay to let the user reconnect).
-  bool _userInitiatedDisconnect = false;
 
   StreamSubscription<ConnmanService>? _changedSub;
   StreamSubscription<ConnmanTechnology>? _techSub;
@@ -121,7 +115,6 @@ class _ServiceScreenState extends State<ServiceScreen> {
     if (_isConnecting || _isConnected) return;
     setState(() {
       _awaitingConnectAck = true;
-      _userInitiatedDisconnect = false;
     });
     try {
       await _svc.connect();
@@ -141,12 +134,10 @@ class _ServiceScreenState extends State<ServiceScreen> {
 
   Future<void> _disconnect() async {
     if (_isConnecting) return; // don't interrupt an in-progress connect
-    setState(() => _userInitiatedDisconnect = true);
     try {
       await _svc.disconnect();
     } on ConnmanException catch (e) {
       if (mounted) {
-        setState(() => _userInitiatedDisconnect = false);
         _showSnackBar('Disconnect failed: ${e.message}');
       }
     }
@@ -182,7 +173,6 @@ class _ServiceScreenState extends State<ServiceScreen> {
           const SizedBox(height: 12),
           _buildPropertiesCard(),
           const SizedBox(height: 12),
-          // _buildTechnologyTile(),
         ],
       ),
     );
@@ -288,28 +278,6 @@ class _ServiceScreenState extends State<ServiceScreen> {
           if (_svc.domains.isNotEmpty)
             _PropertyTile('Domains', _svc.domains.join(', ')),
         ],
-      ),
-    );
-  }
-
-  Widget _buildTechnologyTile() {
-    final tech = widget.client.technologies
-        .where((t) => t.type == _svc.type)
-        .firstOrNull;
-    if (tech == null) return const SizedBox.shrink();
-
-    return Card(
-      child: ListTile(
-        leading: const Icon(Icons.settings_ethernet),
-        title: const Text('Technology Details'),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute<void>(
-            builder: (_) =>
-                TechnologyScreen(client: widget.client, technology: tech),
-          ),
-        ),
       ),
     );
   }
