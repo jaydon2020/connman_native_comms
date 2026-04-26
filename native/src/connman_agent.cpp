@@ -49,6 +49,7 @@ ConnmanAgent::ConnmanAgent(sdbus::IConnection& conn,
                            sdbus::ObjectPath object_path,
                            int64_t events_port)
     : object_path_(std::move(object_path)), events_port_(events_port) {
+  std::cerr << "connman_native_comms: Exporting Agent at " << object_path_ << "\n";
   object_ = sdbus::createObject(conn, object_path_);
 
   // Register modern interface
