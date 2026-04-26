@@ -59,6 +59,13 @@ struct BridgeContext {
       
       std::cout << "connman_native_comms: Registering agent at " << agent->get_path() << "...\n";
       
+      // Try to unregister first in case a previous instance crashed and left the registration stale
+      try {
+        proxy->callMethod("UnregisterAgent")
+            .onInterface("net.connman.Manager")
+            .withArguments(agent->get_path());
+      } catch (...) {}
+
       proxy->callMethod("RegisterAgent")
           .onInterface("net.connman.Manager")
           .withArguments(agent->get_path());

@@ -66,31 +66,44 @@ Future<void> main(List<String> args) async {
   try {
     // service.connect() in the library now handles InProgress gracefully.
     await service.connect();
-    
-    // Wait for the service to reach a connected state (online or ready).
-    print('Waiting for connection to complete...');
-    final completer = Completer<void>();
-    final sub = client.serviceChanged.listen((svc) {
-      if (svc.objectPath == service.objectPath) {
-        print('  Current state: ${svc.state}');
-        if (svc.state == 'online' || svc.state == 'ready') {
-          completer.complete();
-        } else if (svc.state == 'failure') {
-          completer.completeError(ConnmanException(svc.objectPath, svc.error));
-        }
-      }
-    });
-
-    try {
-      await completer.future.timeout(const Duration(seconds: 30));
-      print('\nConnected successfully!');
-    } finally {
-      await sub.cancel();
+  } on ConnmanOperationAbortedException {
+    print('  Operation aborted. Stale credentials might be present.');
+    print('  Removing service and retrying with fresh authentication...');
+    await service.remove();
+    // Wait for the service to reappear and retry
+    final newService = await findService(client, wifi, ssid: ssid, timeout: 5);
+    if (newService != null) {
+      await newService.connect();
+    } else {
+      print('  Failed to recover service after removal.');
+      await client.close();
+      return;
     }
+  }
+
+  // Wait for the service to reach a connected state (online or ready).
+  print('Waiting for connection to complete...');
+  final completer = Completer<void>();
+  final sub = client.serviceChanged.listen((svc) {
+    if (svc.objectPath == service.objectPath || svc.name == ssid) {
+      print('  Current state: ${svc.state}');
+      if (svc.state == 'online' || svc.state == 'ready') {
+        completer.complete();
+      } else if (svc.state == 'failure') {
+        completer.completeError(ConnmanException(svc.objectPath, svc.error));
+      }
+    }
+  });
+
+  try {
+    await completer.future.timeout(const Duration(seconds: 30));
+    print('\nConnected successfully!');
   } on TimeoutException {
     print('\nConnection timed out.');
   } on ConnmanException catch (e) {
     print('\nConnection failed: $e');
+  } finally {
+    await sub.cancel();
   }
 
   print('\nFinal Service Properties:');
