@@ -109,6 +109,28 @@ Future<void> main() async {
   // React to changes
   client.serviceAdded.listen((svc) => print('+ ${svc.name}'));
   client.serviceChanged.listen((svc) => print('~ ${svc.name} → ${svc.state}'));
+  
+  // Provide credentials on demand
+  client.agentRequestInput.listen((path) async {
+    print('Password required for $path');
+    // 1. Cache the password in the native agent
+    client.setPassphrase(path, "my_secret_password");
+    
+    // 2. The first connect attempt was cancelled to ask for credentials. Retry it now!
+    final service = client.services.firstWhere((s) => s.objectPath == path);
+    await service.connect();
+  });
+  client.agentReportError.listen((err) => print('Password rejected for ${err.servicePath}: ${err.error}'));
+
+  // Connect to a specific network
+  final myNetwork = client.services.firstWhere((s) => s.name == 'MyNetwork');
+  try {
+    await myNetwork.connect();
+  } catch (e) {
+    // If a password is required, this initial attempt will throw.
+    // The agentRequestInput listener will automatically catch the event and retry!
+    print('Connection pending credential request...');
+  }
 
   client.close();
 }
@@ -130,6 +152,10 @@ Future<void> main() async {
 | `serviceChanged` | `Stream<ConnmanService>` | Fires on any property change of an existing service. |
 | `serviceRemoved` | `Stream<ConnmanService>` | Fires when a service disappears. |
 | `technologyChanged` | `Stream<ConnmanTechnology>` | Fires on any property change of a technology. |
+| `agentRequestInput` | `Stream<String>` | Fires when ConnMan requests a password for a service path. |
+| `agentReportError` | `Stream<AgentErrorReport>` | Fires when ConnMan rejects a password. |
+| `setPassphrase(String, String)` | `void` | Supply a Wi-Fi password to the native agent for a specific service. |
+| `clearPassphrase(String)` | `void` | Clear a cached Wi-Fi password from the native agent. |
 
 ### `ConnmanService`
 
@@ -208,6 +234,8 @@ The discriminator byte at `message[0]` selects the decode path:
 | `0x05` | `ConnmanService` (removed) |
 | `0x06` | Technology changed |
 | `0x07` | Technology removed |
+| `['AgentRequestInput', path]` | C++ to Dart agent string array |
+| `['AgentReportError', path, err]` | C++ to Dart agent string array |
 | `0x20` | Operation success |
 | `0xFF` | Error string |
 

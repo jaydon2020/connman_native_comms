@@ -58,15 +58,29 @@ struct BridgeContext {
       }
     });
 
-    // Register the ConnMan Agent
-    agent = std::make_unique<ConnmanAgent>(*conn, sdbus::ObjectPath{"/net/connman/native_comms/agent"});
     try {
-      auto proxy = sdbus::createProxy(*conn, sdbus::ServiceName{"net.connman"}, sdbus::ObjectPath{"/"});
+      // Register the ConnMan Agent
+      agent = std::make_unique<ConnmanAgent>(
+          *conn, sdbus::ObjectPath{"/net/connman/native_comms/agent"},
+          events_port);
+      auto proxy = sdbus::createProxy(
+          *conn, sdbus::ServiceName{"net.connman"}, sdbus::ObjectPath{"/"});
       proxy->callMethod("RegisterAgent")
-           .onInterface("net.connman.Manager")
-           .withArguments(agent->get_path());
+          .onInterface("net.connman.Manager")
+          .withArguments(agent->get_path());
     } catch (const sdbus::Error& error) {
-      std::cerr << "connman_native_comms: Failed to register agent: " << error.what() << "\n";
+      std::cerr << "connman_native_comms: Failed to register agent: "
+                << error.what() << "\n";
+      throw; // Fail bridge creation if ConnMan is not available
+    } catch (const std::exception& error) {
+      std::cerr << "connman_native_comms: Failed during initialization: "
+                << error.what() << "\n";
+      conn->leaveEventLoop();
+      if (event_loop_thread.joinable()) {
+        event_loop_thread.join();
+      }
+      // Fail bridge creation, rethrow to be caught by connman_client_create
+      throw;
     }
 
     // Initial snapshot — fetches all technologies and services, subscribes
@@ -78,8 +92,13 @@ struct BridgeContext {
     // 0. Unregister the agent
     if (conn && agent) {
       try {
-        auto proxy = sdbus::createProxy(*conn, sdbus::ServiceName{"net.connman"}, sdbus::ObjectPath{"/"});
-        proxy->callMethod("UnregisterAgent").onInterface("net.connman.Manager").withArguments(agent->get_path());
+        auto proxy =
+            sdbus::createProxy(*conn, sdbus::ServiceName{"net.connman"},
+                               sdbus::ObjectPath{"/"});
+        proxy->callMethod("UnregisterAgent")
+            .onInterface("net.connman.Manager")
+            .withArguments(agent->get_path())
+            .dontExpectReply();
       } catch (...) {}
     }
     agent.reset();
@@ -165,8 +184,8 @@ void connman_service_connect(void* client,
 }
 
 void connman_service_disconnect(void* client,
-                                 const char* object_path,
-                                 int64_t result_port) {
+                                const char* object_path,
+                                int64_t result_port) {
   if (client == nullptr || object_path == nullptr) {
     return;
   }
@@ -187,9 +206,9 @@ void connman_service_remove(void* client,
 }
 
 void connman_service_set_auto_connect(void* client,
-                                       const char* object_path,
-                                       bool auto_connect,
-                                       int64_t result_port) {
+                                      const char* object_path,
+                                      bool auto_connect,
+                                      int64_t result_port) {
   if (client == nullptr || object_path == nullptr) {
     return;
   }
