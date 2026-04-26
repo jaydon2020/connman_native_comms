@@ -53,47 +53,47 @@ ConnmanAgent::ConnmanAgent(sdbus::IConnection& conn,
   object_ = sdbus::createObject(conn, object_path_);
 
   // Register modern interface
-  auto vtable = sdbus::registerMethod("Release")
-          .implementedAs([this]() { this->release(); });
-  vtable.registerMethod("ReportError")
+  object_->addVTable(
+      sdbus::registerMethod("Release")
+          .implementedAs([this]() { this->release(); }),
+      sdbus::registerMethod("ReportError")
           .implementedAs([this](const sdbus::ObjectPath& path,
                                 const std::string& error) {
             this->report_error(path, error);
-          });
-  vtable.registerMethod("RequestBrowser")
+          }),
+      sdbus::registerMethod("RequestBrowser")
           .implementedAs([this](const sdbus::ObjectPath& path,
                                 const std::string& url) {
             this->request_browser(path, url);
-          });
-  vtable.registerMethod("RequestInput")
+          }),
+      sdbus::registerMethod("RequestInput")
           .implementedAs([this](sdbus::Result<std::map<std::string, sdbus::Variant>>&& result,
                                 sdbus::ObjectPath path,
                                 std::map<std::string, sdbus::Variant> fields) {
             this->request_input(std::move(result), std::move(path), std::move(fields));
-          });
-  vtable.registerMethod("Cancel")
-          .implementedAs([this]() { this->cancel(); });
-
-  object_->addVTable(std::move(vtable)).forInterface(kAgentInterface);
+          }),
+      sdbus::registerMethod("Cancel")
+          .implementedAs([this]() { this->cancel(); })
+  ).forInterface(kAgentInterface);
 
   // Also register legacy interface for maximum compatibility
-  auto legacyVTable = sdbus::registerMethod("Release")
-          .implementedAs([this]() { this->release(); });
-  legacyVTable.registerMethod("ReportError")
+  object_->addVTable(
+      sdbus::registerMethod("Release")
+          .implementedAs([this]() { this->release(); }),
+      sdbus::registerMethod("ReportError")
           .implementedAs([this](const sdbus::ObjectPath& path,
                                 const std::string& error) {
             this->report_error(path, error);
-          });
-  legacyVTable.registerMethod("RequestInput")
+          }),
+      sdbus::registerMethod("RequestInput")
           .implementedAs([this](sdbus::Result<std::map<std::string, sdbus::Variant>>&& result,
                                 sdbus::ObjectPath path,
                                 std::map<std::string, sdbus::Variant> fields) {
             this->request_input(std::move(result), std::move(path), std::move(fields));
-          });
-  legacyVTable.registerMethod("Cancel")
-          .implementedAs([this]() { this->cancel(); });
-
-  object_->addVTable(std::move(legacyVTable)).forInterface(kLegacyAgentInterface);
+          }),
+      sdbus::registerMethod("Cancel")
+          .implementedAs([this]() { this->cancel(); })
+  ).forInterface(kLegacyAgentInterface);
 }
 
 ConnmanAgent::~ConnmanAgent() = default;
