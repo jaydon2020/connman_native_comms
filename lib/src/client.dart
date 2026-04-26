@@ -119,7 +119,7 @@ class ConnmanClient {
   // ── Message Router ───────────────────────────────────────────────────────
 
   void _handleMessage(dynamic message) {
-    if (message is List) {
+    if (message is List && message is! Uint8List) {
       // Handle agent notifications (posted as Dart_CObject arrays).
       if (message.length >= 2 && message[0] is String && message[1] is String) {
         final event = message[0] as String;
