@@ -25,6 +25,7 @@ class _ServiceScreenState extends State<ServiceScreen> {
   StreamSubscription<ConnmanService>? _changedSub;
   StreamSubscription<ConnmanTechnology>? _techSub;
   StreamSubscription<String>? _agentSub;
+  StreamSubscription<(String, String)>? _agentErrorSub;
 
   ConnmanService get _svc => widget.service;
 
@@ -42,6 +43,7 @@ class _ServiceScreenState extends State<ServiceScreen> {
     _changedSub = widget.client.serviceChanged.listen(_onServiceChanged);
     _techSub = widget.client.technologyChanged.listen(_onTechChanged);
     _agentSub = widget.client.agentRequestInput.listen(_onAgentRequestInput);
+    _agentErrorSub = widget.client.agentReportError.listen(_onAgentError);
   }
 
   void _onServiceChanged(ConnmanService svc) {
@@ -67,6 +69,14 @@ class _ServiceScreenState extends State<ServiceScreen> {
   void _onAgentRequestInput(String path) {
     if (!mounted || path != _svc.objectPath) return;
     _showPassphraseDialog();
+  }
+
+  void _onAgentError((String, String) error) {
+    if (!mounted || error.$1 != _svc.objectPath) return;
+    _showSnackBar('Connection failed: ${error.$2}');
+    setState(() {
+      _awaitingConnectAck = false;
+    });
   }
 
   Future<void> _showPassphraseDialog() async {
@@ -154,6 +164,7 @@ class _ServiceScreenState extends State<ServiceScreen> {
     _changedSub?.cancel();
     _techSub?.cancel();
     _agentSub?.cancel();
+    _agentErrorSub?.cancel();
     super.dispose();
   }
 

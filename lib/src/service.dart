@@ -59,7 +59,11 @@ class ConnmanService {
   }
 
   Future<void> connect() async {
-    await client.serviceConnect(objectPath);
+    try {
+      await client.serviceConnect(objectPath);
+    } on ConnmanInProgressException {
+      // Already connecting — this is fine, we'll wait for the signals.
+    }
   }
 
   Future<void> disconnect() async {

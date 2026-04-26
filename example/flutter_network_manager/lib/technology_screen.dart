@@ -31,6 +31,7 @@ class _TechnologyScreenState extends State<TechnologyScreen> {
   StreamSubscription<ConnmanService>? _svcChangedSub;
   StreamSubscription<ConnmanService>? _svcRemovedSub;
   StreamSubscription<String>? _agentSub;
+  StreamSubscription<(String, String)>? _agentErrorSub;
 
   bool _scanning = false;
   // Track services that are currently connecting or disconnecting
@@ -74,6 +75,7 @@ class _TechnologyScreenState extends State<TechnologyScreen> {
     });
 
     _agentSub = widget.client.agentRequestInput.listen(_onAgentRequestInput);
+    _agentErrorSub = widget.client.agentReportError.listen(_onAgentError);
   }
 
   void _onAgentRequestInput(String path) {
@@ -84,6 +86,24 @@ class _TechnologyScreenState extends State<TechnologyScreen> {
         .firstOrNull;
     if (svc != null) {
       _showPassphraseDialog(svc);
+    }
+  }
+
+  void _onAgentError((String, String) error) {
+    if (!mounted) return;
+    final path = error.$1;
+    final message = error.$2;
+    // Only handle if it's a service belonging to this technology
+    final svc = widget.client.services
+        .where((s) => s.objectPath == path && s.type == _tech.type)
+        .firstOrNull;
+    if (svc != null) {
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text('Connection failed: $message')));
+      setState(() {
+        _connectingServicePaths.remove(path);
+      });
     }
   }
 
@@ -137,6 +157,7 @@ class _TechnologyScreenState extends State<TechnologyScreen> {
     _svcChangedSub?.cancel();
     _svcRemovedSub?.cancel();
     _agentSub?.cancel();
+    _agentErrorSub?.cancel();
     super.dispose();
   }
 
