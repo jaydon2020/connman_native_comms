@@ -71,7 +71,7 @@ Future<void> main(List<String> args) async {
     print('  Removing service and retrying with fresh authentication...');
     await service.remove();
     // Wait for the service to reappear and retry
-    final newService = await findService(client, wifi, ssid: ssid, timeout: 5);
+    final newService = await findService(client, wifi, ssid: ssid, timeout: const Duration(seconds: 5));
     if (newService != null) {
       await newService.connect();
     } else {
