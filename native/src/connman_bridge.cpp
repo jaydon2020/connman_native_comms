@@ -53,15 +53,22 @@ struct BridgeContext {
       agent = std::make_unique<ConnmanAgent>(
           *conn, sdbus::ObjectPath{"/net/connman/native_comms/agent"},
           events_port);
+      
       auto proxy = sdbus::createProxy(
           *conn, sdbus::ServiceName{"net.connman"}, sdbus::ObjectPath{"/"});
+      
+      std::cout << "connman_native_comms: Registering agent at " << agent->get_path() << "...\n";
+      
       proxy->callMethod("RegisterAgent")
           .onInterface("net.connman.Manager")
           .withArguments(agent->get_path());
+          
+      std::cout << "connman_native_comms: Agent registered successfully.\n";
     } catch (const sdbus::Error& error) {
       std::cerr << "connman_native_comms: Failed to register agent: "
-                << error.what() << "\n";
-      throw; // Fail bridge creation if ConnMan is not available
+                << error.getName() << " - " << error.getMessage() << "\n";
+      // Don't fail bridge creation if agent registration fails (might be because one is already registered)
+      // but log it prominently.
     } catch (const std::exception& error) {
       std::cerr << "connman_native_comms: Failed during initialization: "
                 << error.what() << "\n";

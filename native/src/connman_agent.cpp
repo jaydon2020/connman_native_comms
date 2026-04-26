@@ -182,17 +182,19 @@ void ConnmanAgent::request_input(
       response["Password"] = sdbus::Variant(it->second);
     }
 
-    if (fields.find("Identity") != fields.end()) {
+    if (it->second.fields.find("Identity") != it->second.fields.end()) {
+      // Default to "anonymous" if no identity was provided, but ensure the key exists.
       response["Identity"] = sdbus::Variant(std::string("anonymous"));
     }
 
     std::cout << "connman_native_comms: Returning cached passphrase for " << path_str << "\n";
     result.returnResults(response);
     return;
-  }
+    }
 
-  // Notify Dart so the UI can prompt the user for the passphrase.
-  notify_dart(events_port_, "AgentRequestInput", path_str);
+    // Notify Dart so the UI can prompt the user for the passphrase.
+    std::cout << "connman_native_comms: Notifying Dart about RequestInput for " << path_str << "\n";
+    notify_dart(events_port_, "AgentRequestInput", path_str);
 
   // Store the pending result to be fulfilled when set_passphrase is called
   pending_requests_.erase(path_str);

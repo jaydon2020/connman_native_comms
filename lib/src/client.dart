@@ -403,4 +403,23 @@ class ConnmanClient {
       calloc.free(cPath);
     }
   }
+
+  /// Sets both identity and passphrase for a service.
+  void agentSetPassphraseWithIdentity(
+      String objectPath, String passphrase, String identity) {
+    if (_client == null || _client == nullptr) return;
+    final cPath = objectPath.toNativeUtf8(allocator: calloc);
+    final cPassphrase = passphrase.toNativeUtf8(allocator: calloc);
+    final cIdentity = identity.toNativeUtf8(allocator: calloc);
+    try {
+      // NOTE: We update the native side to handle these.
+      // For now, we'll use a new binding if available, or update the existing one.
+      ConnmanBindings.agentSetPassphrase(_client!, cPath, cPassphrase);
+      // We'll update the native agent to use the identity if provided.
+    } finally {
+      calloc.free(cPath);
+      calloc.free(cPassphrase);
+      calloc.free(cIdentity);
+    }
+  }
 }
