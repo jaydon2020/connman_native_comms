@@ -65,10 +65,10 @@ ConnmanAgent::ConnmanAgent(sdbus::IConnection& conn,
             this->request_browser(path, url);
           }),
       sdbus::registerMethod("RequestInput")
-          .implementedAs([this](const sdbus::ObjectPath& path,
-                                const std::map<std::string, sdbus::Variant>&
-                                    fields) {
-            return this->request_input(path, fields);
+          .implementedAs([this](sdbus::Result<std::map<std::string, sdbus::Variant>>&& result,
+                                sdbus::ObjectPath path,
+                                std::map<std::string, sdbus::Variant> fields) {
+            this->request_input(std::move(result), std::move(path), std::move(fields));
           }),
       sdbus::registerMethod("Cancel")
           .implementedAs([this]() { this->cancel(); })
@@ -81,11 +81,33 @@ void ConnmanAgent::set_passphrase(const std::string& service_path,
                                   const std::string& passphrase) {
   std::lock_guard<std::mutex> lock(mutex_);
   passphrases_[service_path] = passphrase;
+
+  // Fulfill any pending async D-Bus request for this service
+  auto it = pending_requests_.find(service_path);
+  if (it != pending_requests_.end()) {
+    std::map<std::string, sdbus::Variant> response;
+    if (it->second.fields.find("Passphrase") != it->second.fields.end()) {
+      response["Passphrase"] = sdbus::Variant(passphrase);
+    } else if (it->second.fields.find("Password") != it->second.fields.end()) {
+      response["Password"] = sdbus::Variant(passphrase);
+    }
+    it->second.result.returnResults(response);
+    pending_requests_.erase(it);
+  }
 }
 
 void ConnmanAgent::clear_passphrase(const std::string& service_path) {
   std::lock_guard<std::mutex> lock(mutex_);
   passphrases_.erase(service_path);
+
+  // Fulfill with error if the user explicitly canceled the password prompt
+  auto it = pending_requests_.find(service_path);
+  if (it != pending_requests_.end()) {
+    it->second.result.returnError(sdbus::Error(
+        sdbus::Error::Name("net.connman.Agent.Error.Canceled"),
+        "User canceled input"));
+    pending_requests_.erase(it);
+  }
 }
 
 void ConnmanAgent::release() {
@@ -111,32 +133,43 @@ void ConnmanAgent::request_browser(const sdbus::ObjectPath& path,
             << " (URL: " << url << ")\n";
 }
 
-std::map<std::string, sdbus::Variant> ConnmanAgent::request_input(
-    const sdbus::ObjectPath& path,
-    const std::map<std::string, sdbus::Variant>& fields) {
+void ConnmanAgent::request_input(
+    sdbus::Result<std::map<std::string, sdbus::Variant>>&& result,
+    sdbus::ObjectPath path,
+    std::map<std::string, sdbus::Variant> fields) {
   std::lock_guard<std::mutex> lock(mutex_);
-  auto it = passphrases_.find(static_cast<std::string>(path));
+  std::string path_str = static_cast<std::string>(path);
+  auto it = passphrases_.find(path_str);
 
-  if (it == passphrases_.end()) {
-    // Notify Dart so the UI can prompt the user for the passphrase.
-    notify_dart(events_port_, "AgentRequestInput", static_cast<std::string>(path));
-
-    // Throw a generic D-Bus error that tells ConnMan to cancel the attempt
-    throw sdbus::Error(sdbus::Error::Name("net.connman.Agent.Error.Canceled"),
-                       "No passphrase provided for service");
+  if (it != passphrases_.end()) {
+    std::map<std::string, sdbus::Variant> response;
+    if (fields.find("Passphrase") != fields.end()) {
+      response["Passphrase"] = sdbus::Variant(it->second);
+    } else if (fields.find("Password") != fields.end()) {
+      // Fallback for 802.1x EAP networks which request "Password" instead
+      // of "Passphrase"
+      response["Password"] = sdbus::Variant(it->second);
+    }
+    result.returnResults(response);
+    return;
   }
 
-  std::map<std::string, sdbus::Variant> response;
-  if (fields.find("Passphrase") != fields.end()) {
-    response["Passphrase"] = sdbus::Variant(it->second);
-  } else if (fields.find("Password") != fields.end()) {
-    // Fallback for 802.1x EAP networks which request "Password" instead
-    // of "Passphrase"
-    response["Password"] = sdbus::Variant(it->second);
-  }
-  return response;
+  // Notify Dart so the UI can prompt the user for the passphrase.
+  notify_dart(events_port_, "AgentRequestInput", path_str);
+
+  // Store the pending result to be fulfilled when set_passphrase is called
+  pending_requests_.erase(path_str);
+  pending_requests_.emplace(path_str,
+                            PendingRequest{std::move(result), std::move(fields)});
 }
 
 void ConnmanAgent::cancel() {
+  std::lock_guard<std::mutex> lock(mutex_);
   // Invoked if the input request is cancelled by ConnMan
+  for (auto& pair : pending_requests_) {
+    pair.second.result.returnError(sdbus::Error(
+        sdbus::Error::Name("net.connman.Agent.Error.Canceled"),
+        "Canceled by ConnMan"));
+  }
+  pending_requests_.clear();
 }

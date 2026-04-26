@@ -111,26 +111,16 @@ Future<void> main() async {
   client.serviceChanged.listen((svc) => print('~ ${svc.name} → ${svc.state}'));
   
   // Provide credentials on demand
-  client.agentRequestInput.listen((path) async {
+  client.agentRequestInput.listen((path) {
     print('Password required for $path');
-    // 1. Cache the password in the native agent
+    // Cache the password in the native agent (this automatically resumes the connection)
     client.setPassphrase(path, "my_secret_password");
-    
-    // 2. The first connect attempt was cancelled to ask for credentials. Retry it now!
-    final service = client.services.firstWhere((s) => s.objectPath == path);
-    await service.connect();
   });
   client.agentReportError.listen((err) => print('Password rejected for ${err.servicePath}: ${err.error}'));
 
   // Connect to a specific network
   final myNetwork = client.services.firstWhere((s) => s.name == 'MyNetwork');
-  try {
-    await myNetwork.connect();
-  } catch (e) {
-    // If a password is required, this initial attempt will throw.
-    // The agentRequestInput listener will automatically catch the event and retry!
-    print('Connection pending credential request...');
-  }
+  await myNetwork.connect();
 
   client.close();
 }
