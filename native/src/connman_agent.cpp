@@ -49,7 +49,6 @@ ConnmanAgent::ConnmanAgent(sdbus::IConnection& conn,
                            sdbus::ObjectPath object_path,
                            int64_t events_port)
     : object_path_(std::move(object_path)), events_port_(events_port) {
-  std::cout << "connman_native_comms: Creating Agent at " << object_path_ << "\n";
   object_ = sdbus::createObject(conn, object_path_);
 
   // Register modern interface
@@ -100,7 +99,7 @@ ConnmanAgent::~ConnmanAgent() = default;
 
 void ConnmanAgent::set_passphrase(const std::string& service_path,
                                   const std::string& passphrase) {
-  std::cout << "connman_native_comms: Setting passphrase for " << service_path << "\n";
+  std::cerr << "connman_native_comms: [Agent] Setting passphrase for " << service_path << "\n";
   std::lock_guard<std::mutex> lock(mutex_);
   passphrases_[service_path] = passphrase;
 
@@ -118,14 +117,14 @@ void ConnmanAgent::set_passphrase(const std::string& service_path,
       response["Identity"] = sdbus::Variant(std::string("anonymous"));
     }
 
-    std::cout << "connman_native_comms: Fulfilling pending RequestInput for " << service_path << "\n";
+    std::cerr << "connman_native_comms: [Agent] Fulfilling pending RequestInput for " << service_path << "\n";
     it->second.result.returnResults(response);
     pending_requests_.erase(it);
   }
 }
 
 void ConnmanAgent::clear_passphrase(const std::string& service_path) {
-  std::cout << "connman_native_comms: Clearing passphrase/canceling for " << service_path << "\n";
+  std::cerr << "connman_native_comms: [Agent] Clearing passphrase/canceling for " << service_path << "\n";
   std::lock_guard<std::mutex> lock(mutex_);
   passphrases_.erase(service_path);
 
@@ -140,12 +139,12 @@ void ConnmanAgent::clear_passphrase(const std::string& service_path) {
 }
 
 void ConnmanAgent::release() {
-  std::cout << "connman_native_comms: Agent released by ConnMan\n";
+  std::cerr << "connman_native_comms: [Agent] Released by ConnMan\n";
 }
 
 void ConnmanAgent::report_error(const sdbus::ObjectPath& path,
                                 const std::string& error) {
-  std::cerr << "connman_native_comms: Agent ReportError for " << path
+  std::cerr << "connman_native_comms: [Agent] ReportError for " << path
             << ": " << error << "\n";
 
   // If the password is wrong (e.g. "invalid-key"), ConnMan will immediately
@@ -157,7 +156,7 @@ void ConnmanAgent::report_error(const sdbus::ObjectPath& path,
 
 void ConnmanAgent::request_browser(const sdbus::ObjectPath& path,
                                    const std::string& url) {
-  std::cout << "connman_native_comms: Agent RequestBrowser for " << path
+  std::cerr << "connman_native_comms: [Agent] RequestBrowser for " << path
             << " (URL: " << url << ")\n";
 }
 
@@ -165,13 +164,13 @@ void ConnmanAgent::request_input(
     sdbus::Result<std::map<std::string, sdbus::Variant>>&& result,
     sdbus::ObjectPath path,
     std::map<std::string, sdbus::Variant> fields) {
-  std::cout << "connman_native_comms: Agent RequestInput called for " << path << "\n";
+  std::string path_str = static_cast<std::string>(path);
+  std::cerr << "connman_native_comms: [Agent] RequestInput called for " << path_str << "\n";
   for (const auto& [key, _] : fields) {
-      std::cout << "  Requested field: " << key << "\n";
+      std::cerr << "  Requested field: " << key << "\n";
   }
 
   std::lock_guard<std::mutex> lock(mutex_);
-  std::string path_str = static_cast<std::string>(path);
   auto it = passphrases_.find(path_str);
 
   if (it != passphrases_.end()) {
@@ -183,17 +182,16 @@ void ConnmanAgent::request_input(
     }
 
     if (fields.find("Identity") != fields.end()) {
-      // Default to "anonymous" if no identity was provided, but ensure the key exists.
       response["Identity"] = sdbus::Variant(std::string("anonymous"));
     }
 
-    std::cout << "connman_native_comms: Returning cached passphrase for " << path_str << "\n";
+    std::cerr << "connman_native_comms: [Agent] Returning cached passphrase for " << path_str << "\n";
     result.returnResults(response);
     return;
   }
 
   // Notify Dart so the UI can prompt the user for the passphrase.
-  std::cout << "connman_native_comms: Notifying Dart about RequestInput for " << path_str << "\n";
+  std::cerr << "connman_native_comms: [Agent] Notifying Dart about RequestInput for " << path_str << "\n";
   notify_dart(events_port_, "AgentRequestInput", path_str);
 
   // Store the pending result to be fulfilled when set_passphrase is called
@@ -203,7 +201,7 @@ void ConnmanAgent::request_input(
 }
 
 void ConnmanAgent::cancel() {
-  std::cout << "connman_native_comms: Agent Cancel called by ConnMan\n";
+  std::cerr << "connman_native_comms: [Agent] Cancel called by ConnMan\n";
   std::lock_guard<std::mutex> lock(mutex_);
   // Invoked if the input request is cancelled by ConnMan
   for (auto& pair : pending_requests_) {

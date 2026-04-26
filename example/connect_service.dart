@@ -25,7 +25,6 @@ Future<void> main(List<String> args) async {
   client.agentRequestInput.listen((path) {
     print('\n[Agent] Passphrase requested for $path');
     stdout.write('Enter password: ');
-    // Hide input if possible, but keep it simple for the example.
     final pass = stdin.readLineSync() ?? '';
     client.agentSetPassphrase(path, pass);
   });
@@ -54,9 +53,26 @@ Future<void> main(List<String> args) async {
     await Future<void>.delayed(const Duration(milliseconds: 500));
   }
 
+  // 1. Clear any stale state for this SSID.
+  final existing = client.services.where((s) => s.name == ssid).toList();
+  for (final s in existing) {
+    print('Removing stale service record for "${s.name}" (${s.objectPath})...');
+    final removed = Completer<void>();
+    final sub = client.serviceRemoved.listen((rs) {
+      if (rs.objectPath == s.objectPath) removed.complete();
+    });
+    try {
+      await s.remove();
+      await removed.future.timeout(const Duration(seconds: 2));
+    } catch (_) {} finally {
+      await sub.cancel();
+    }
+  }
+
+  // 2. Scan and find the fresh service object.
   final service = await findService(client, wifi, ssid: ssid, timeout: timeout);
   if (service == null) {
-    print('Service "$ssid" not found.');
+    print('Service "$ssid" not found after scan.');
     await client.close();
     return;
   }
@@ -64,46 +80,35 @@ Future<void> main(List<String> args) async {
   print('Connecting to "${service.name}" (${service.objectPath})...');
 
   try {
-    // service.connect() in the library now handles InProgress gracefully.
+    // 3. Initiate connection.
     await service.connect();
-  } on ConnmanOperationAbortedException {
-    print('  Operation aborted. Stale credentials might be present.');
-    print('  Removing service and retrying with fresh authentication...');
-    await service.remove();
-    // Wait for the service to reappear and retry
-    final newService = await findService(client, wifi, ssid: ssid, timeout: const Duration(seconds: 5));
-    if (newService != null) {
-      await newService.connect();
-    } else {
-      print('  Failed to recover service after removal.');
-      await client.close();
-      return;
-    }
-  }
-
-  // Wait for the service to reach a connected state (online or ready).
-  print('Waiting for connection to complete...');
-  final completer = Completer<void>();
-  final sub = client.serviceChanged.listen((svc) {
-    if (svc.objectPath == service.objectPath || svc.name == ssid) {
-      print('  Current state: ${svc.state}');
-      if (svc.state == 'online' || svc.state == 'ready') {
-        completer.complete();
-      } else if (svc.state == 'failure') {
-        completer.completeError(ConnmanException(svc.objectPath, svc.error));
+    
+    // 4. Wait for completion signals.
+    print('Waiting for connection to complete...');
+    final completer = Completer<void>();
+    final sub = client.serviceChanged.listen((svc) {
+      if (svc.objectPath == service.objectPath) {
+        print('  Current state: ${svc.state}');
+        if (svc.state == 'online' || svc.state == 'ready') {
+          completer.complete();
+        } else if (svc.state == 'failure') {
+          completer.completeError(ConnmanException(svc.objectPath, svc.error));
+        }
       }
-    }
-  });
+    });
 
-  try {
-    await completer.future.timeout(const Duration(seconds: 30));
-    print('\nConnected successfully!');
+    try {
+      await completer.future.timeout(const Duration(seconds: 45));
+      print('\nConnected successfully!');
+    } finally {
+      await sub.cancel();
+    }
+  } on ConnmanOperationAbortedException {
+    print('\nConnection aborted by ConnMan. This usually means the agent was not ready.');
   } on TimeoutException {
     print('\nConnection timed out.');
   } on ConnmanException catch (e) {
     print('\nConnection failed: $e');
-  } finally {
-    await sub.cancel();
   }
 
   print('\nFinal Service Properties:');
@@ -111,8 +116,6 @@ Future<void> main(List<String> args) async {
   print('  Type:        ${service.type}');
   print('  Security:    ${service.security}');
   print('  Strength:    ${service.strength}');
-  print('  AutoConnect: ${service.autoConnect}');
-  print('  Nameservers: ${service.nameservers}');
 
   await client.close();
   print('\nDone.');
