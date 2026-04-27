@@ -1,5 +1,6 @@
 // example/connect_service.dart — connect to a WiFi network by SSID.
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:connman_native_comms/connman_native_comms.dart';
 
@@ -12,19 +13,59 @@ Future<void> main(List<String> args) async {
   }
 
   final ssid = args[0];
-  final timeout = parseScanTimeout(args);
+  final timeoutSeconds = parseScanTimeout(args);
+  final timeout = Duration(seconds: timeoutSeconds);
   final client = ConnmanClient();
-  
+
   // Initialize Agent listeners
-  client.agentRequestInput.listen((path) {
+  client.agentRequestInput.listen((path) async {
     print('\n[Agent] Password required for $path');
     stdout.write('Enter WiFi Password: ');
-    final pass = stdin.readLineSync() ?? '';
+
+    String pass = '';
+    final bool originalEchoMode = stdin.echoMode;
+    final bool originalLineMode = stdin.lineMode;
+
+    try {
+      // Disable echo for password entry
+      if (stdin.hasTerminal) {
+        stdin.echoMode = false;
+        stdin.lineMode = false;
+      }
+
+      // Read password character by character to remain non-blocking to the isolate
+      final List<int> codes = [];
+      await for (final List<int> chunk in stdin) {
+        bool breakAfterChunk = false;
+        for (final int code in chunk) {
+          if (code == 10 || code == 13) {
+            // Newline/Enter
+            breakAfterChunk = true;
+            break;
+          } else if (code == 127 || code == 8) {
+            // Backspace
+            if (codes.isNotEmpty) codes.removeLast();
+          } else {
+            codes.add(code);
+          }
+        }
+        if (breakAfterChunk) break;
+      }
+      pass = utf8.decode(codes);
+    } finally {
+      if (stdin.hasTerminal) {
+        stdin.echoMode = originalEchoMode;
+        stdin.lineMode = originalLineMode;
+      }
+      stdout.writeln(); // Move to next line after Enter
+    }
+
     client.agentSetPassphrase(path, pass);
   });
 
   client.agentReportError.listen((error) {
     print('\n[Agent] Authentication Error: ${error.$2}');
+    print('[Agent] ConnMan will re-prompt for credentials if retrying.');
   });
 
   await client.connect();
@@ -38,7 +79,7 @@ Future<void> main(List<String> args) async {
 
   // Find the service
   print('Searching for "$ssid"...');
-  var service = await findService(client, wifi, ssid: ssid, timeout: timeout);
+  final service = await findService(client, wifi, ssid: ssid, timeout: timeoutSeconds);
   if (service == null) {
     await client.close();
     return;
@@ -46,44 +87,57 @@ Future<void> main(List<String> args) async {
 
   print('Connecting to ${service.name} (${service.objectPath})...');
 
+  StreamSubscription<ConnmanService>? sub;
   try {
     // Check if already connected
     if (service.state == 'online' || service.state == 'ready') {
       print('  -> State: ${service.state} (already connected)');
       print('\nSUCCESS: Connected to $ssid');
-      await client.close();
       return;
     }
 
     // Track state until success or failure
     final completer = Completer<void>();
-    late StreamSubscription<ConnmanService> sub;
-    
+
     // Set up listener BEFORE calling connect to avoid race conditions
-    sub = client.serviceChanged.listen((svc) {
-      if (svc.objectPath == service!.objectPath) {
-        print('  -> State: ${svc.state}');
-        if (svc.state == 'online' || svc.state == 'ready') {
-          completer.complete();
-        } else if (svc.state == 'failure') {
-          completer.completeError(svc.error ?? 'Connection failed with no error details');
+    sub = client.serviceChanged.listen(
+      (svc) {
+        if (svc.objectPath == service.objectPath) {
+          // Skip redundant idle states if we are already trying to connect
+          if (svc.state == 'idle') return;
+
+          print('  -> State: ${svc.state}');
+          if (svc.state == 'online' || svc.state == 'ready') {
+            if (!completer.isCompleted) completer.complete();
+          } else if (svc.state == 'failure') {
+            if (!completer.isCompleted) {
+              completer.completeError(svc.error.isNotEmpty
+                  ? svc.error
+                  : 'Connection failed with no error details');
+            }
+          }
         }
-      }
-    });
+      },
+      onError: (e) {
+        if (!completer.isCompleted) completer.completeError(e);
+      },
+      cancelOnError: true,
+    );
 
     // Now attempt connection after listener is ready
     await service.connect();
-    
-    // Wait for connection to complete with timeout
-    await completer.future.timeout(const Duration(seconds: 60));
+
+    // Wait for connection to complete with timeout (use provided timeout or 60s default)
+    final effectiveTimeout = timeoutSeconds > 0 ? timeout : const Duration(seconds: 60);
+    await completer.future.timeout(effectiveTimeout);
     print('\nSUCCESS: Connected to $ssid');
-    
-    // Clean up the listener
-    await sub.cancel();
   } catch (e) {
     print('\nFAILED: $e');
     print('If it aborted, try removing the service first: connmanctl remove ${service.objectPath}');
   } finally {
+    if (sub != null) {
+      await sub.cancel();
+    }
     await client.close();
   }
 }
