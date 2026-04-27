@@ -31,6 +31,7 @@ class CONNMAN_NC_EXPORT ConnmanAgent {
 
   sdbus::ObjectPath object_path_;
   std::unique_ptr<sdbus::IObject> object_;
+  sdbus::Slot vtable_slot_;
   int64_t events_port_;
 
   std::mutex mutex_;
