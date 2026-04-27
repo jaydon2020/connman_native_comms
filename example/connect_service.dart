@@ -13,8 +13,7 @@ Future<void> main(List<String> args) async {
   }
 
   final ssid = args[0];
-  final timeoutSeconds = parseScanTimeout(args);
-  final timeout = Duration(seconds: timeoutSeconds);
+  final timeout = parseScanTimeout(args);
   final client = ConnmanClient();
 
   // Initialize Agent listeners
@@ -79,7 +78,7 @@ Future<void> main(List<String> args) async {
 
   // Find the service
   print('Searching for "$ssid"...');
-  final service = await findService(client, wifi, ssid: ssid, timeout: timeoutSeconds);
+  final service = await findService(client, wifi, ssid: ssid, timeout: timeout);
   if (service == null) {
     await client.close();
     return;
@@ -127,8 +126,8 @@ Future<void> main(List<String> args) async {
     // Now attempt connection after listener is ready
     await service.connect();
 
-    // Wait for connection to complete with timeout (use provided timeout or 60s default)
-    final effectiveTimeout = timeoutSeconds > 0 ? timeout : const Duration(seconds: 60);
+    // Wait for connection to complete with timeout (use provided timeout if > 0, otherwise default 60s)
+    final effectiveTimeout = timeout.inSeconds > 0 ? timeout : const Duration(seconds: 60);
     await completer.future.timeout(effectiveTimeout);
     print('\nSUCCESS: Connected to $ssid');
   } catch (e) {
