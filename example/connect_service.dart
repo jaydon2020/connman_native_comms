@@ -6,6 +6,10 @@ import 'package:connman_native_comms/connman_native_comms.dart';
 
 import 'example_utils.dart';
 
+/// Default connection timeout — intentionally longer than scan timeout because
+/// the D-Bus Connect() call may block while the agent waits for user input.
+const Duration kConnectionTimeout = Duration(seconds: 60);
+
 Future<void> main(List<String> args) async {
   if (args.isEmpty) {
     print('Usage: dart run example/connect_service.dart <ssid> [--timeout <seconds>]');
@@ -13,7 +17,7 @@ Future<void> main(List<String> args) async {
   }
 
   final ssid = args[0];
-  final timeout = parseScanTimeout(args);
+  final scanTimeout = parseScanTimeout(args);
   final client = ConnmanClient();
 
   // Initialize Agent listeners
@@ -78,7 +82,7 @@ Future<void> main(List<String> args) async {
 
   // Find the service
   print('Searching for "$ssid"...');
-  final service = await findService(client, wifi, ssid: ssid, timeout: timeout);
+  final service = await findService(client, wifi, ssid: ssid, timeout: scanTimeout);
   if (service == null) {
     await client.close();
     return;
@@ -123,12 +127,43 @@ Future<void> main(List<String> args) async {
       cancelOnError: true,
     );
 
-    // Now attempt connection after listener is ready
+    // Now attempt connection after listener is ready.
+    // service.connect() swallows expected D-Bus errors (InProgress, AlreadyConnected,
+    // OperationAborted, Failed, NotConnected) so we don't know whether ConnMan will
+    // proceed or has already given up.  We need to re-check state after it returns.
     await service.connect();
 
-    // Wait for connection to complete with timeout (use provided timeout if > 0, otherwise default 60s)
-    final effectiveTimeout = timeout.inSeconds > 0 ? timeout : const Duration(seconds: 60);
-    await completer.future.timeout(effectiveTimeout);
+    // After service.connect() returns, re-check state: the service state may have
+    // already changed during the Connect() call, and we may have missed the event
+    // if it arrived before the listener captured a terminal state, or if ConnMan
+    // returned an error that service.connect() swallowed without any state change.
+    if (!completer.isCompleted) {
+      // Re-read the cached service state (updated by serviceChanged events)
+      final current = client.services
+          .where((s) => s.objectPath == service.objectPath)
+          .firstOrNull;
+      if (current != null) {
+        if (current.state == 'online' || current.state == 'ready') {
+          completer.complete();
+        } else if (current.state == 'failure') {
+          completer.completeError(current.error.isNotEmpty
+              ? current.error
+              : 'Connection failed with no error details');
+        } else if (current.state == 'idle' || current.state == 'disconnect') {
+          // ConnMan gave up without transitioning to 'failure' — likely the
+          // Connect() D-Bus call returned an error that service.connect() swallowed.
+          completer.completeError(
+            'Connection attempt ended (service state: ${current.state}). '
+            'Try removing the service first: connmanctl remove ${service.objectPath}',
+          );
+        }
+      }
+    }
+
+    // Wait for connection to complete with a fixed connection timeout.
+    // This is separate from the scan timeout (--timeout flag) because connecting
+    // may require agent interaction (password prompt) which needs much more time.
+    await completer.future.timeout(kConnectionTimeout);
     print('\nSUCCESS: Connected to $ssid');
   } catch (e) {
     print('\nFAILED: $e');
