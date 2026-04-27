@@ -88,90 +88,135 @@ Future<void> main(List<String> args) async {
     return;
   }
 
+  // Check if already connected
+  if (service.state == 'online' || service.state == 'ready') {
+    print('  -> State: ${service.state} (already connected)');
+    print('\nSUCCESS: Connected to $ssid');
+    await client.close();
+    return;
+  }
+
   print('Connecting to ${service.name} (${service.objectPath})...');
 
-  StreamSubscription<ConnmanService>? sub;
-  try {
-    // Check if already connected
-    if (service.state == 'online' || service.state == 'ready') {
-      print('  -> State: ${service.state} (already connected)');
-      print('\nSUCCESS: Connected to $ssid');
+  // First attempt
+  var result = await _tryConnect(client, service);
+
+  // If the connection returned to idle it means ConnMan had stale cached
+  // credentials for this "favorite" service and failed silently without
+  // calling the agent.  Remove the service config to clear cached creds,
+  // re-scan to rediscover it, then retry — ConnMan will call the agent
+  // this time.
+  if (result == _ConnectResult.staleIdle && service.favorite) {
+    print('  Service has stale credentials — removing and retrying...');
+    try {
+      await service.remove();
+    } catch (e) {
+      print('\nFAILED: Could not remove stale service: $e');
+      await client.close();
       return;
     }
 
-    // Track state until success or failure
-    final completer = Completer<void>();
+    // Re-scan so ConnMan re-discovers the service (now without cached creds)
+    final freshService =
+        await findService(client, wifi, ssid: ssid, timeout: scanTimeout);
+    if (freshService == null) {
+      print('\nFAILED: Service not found after removal.');
+      await client.close();
+      return;
+    }
 
+    print('Connecting to ${freshService.name} (${freshService.objectPath})...');
+    result = await _tryConnect(client, freshService);
+  }
+
+  switch (result) {
+    case _ConnectResult.success:
+      print('\nSUCCESS: Connected to $ssid');
+    case _ConnectResult.staleIdle:
+      print('\nFAILED: Connection ended with idle state.');
+      print('Try manually: connmanctl remove ${service.objectPath}');
+    case _ConnectResult.failure:
+      // Error details already printed by _tryConnect
+      break;
+  }
+
+  await client.close();
+}
+
+// ── Connection helper ──────────────────────────────────────────────────────
+
+enum _ConnectResult { success, failure, staleIdle }
+
+/// Attempt to connect to [service] and wait for a terminal state.
+///
+/// Returns the outcome so the caller can decide whether to retry.
+Future<_ConnectResult> _tryConnect(
+    ConnmanClient client, ConnmanService service) async {
+  final completer = Completer<_ConnectResult>();
+  StreamSubscription<ConnmanService>? sub;
+
+  try {
     // Set up listener BEFORE calling connect to avoid race conditions
     sub = client.serviceChanged.listen(
       (svc) {
         if (svc.objectPath == service.objectPath) {
-          // Skip redundant idle states if we are already trying to connect
-          if (svc.state == 'idle') return;
+          if (svc.state == 'idle') return; // skip transient idle
 
           print('  -> State: ${svc.state}');
           if (svc.state == 'online' || svc.state == 'ready') {
-            if (!completer.isCompleted) completer.complete();
+            if (!completer.isCompleted) {
+              completer.complete(_ConnectResult.success);
+            }
           } else if (svc.state == 'failure') {
             if (!completer.isCompleted) {
-              completer.completeError(svc.error.isNotEmpty
+              final reason = svc.error.isNotEmpty
                   ? svc.error
-                  : 'Connection failed with no error details');
+                  : 'Connection failed with no error details';
+              print('\nFAILED: $reason');
+              completer.complete(_ConnectResult.failure);
             }
           }
         }
       },
       onError: (e) {
-        if (!completer.isCompleted) completer.completeError(e);
+        if (!completer.isCompleted) {
+          print('\nFAILED: $e');
+          completer.complete(_ConnectResult.failure);
+        }
       },
-      cancelOnError: true,
     );
 
     // Now attempt connection after listener is ready.
-    // service.connect() swallows expected D-Bus errors (InProgress, AlreadyConnected,
-    // OperationAborted, Failed, NotConnected) so we don't know whether ConnMan will
-    // proceed or has already given up.  We need to re-check state after it returns.
     await service.connect();
 
-    // After service.connect() returns, re-check state: the service state may have
-    // already changed during the Connect() call, and we may have missed the event
-    // if it arrived before the listener captured a terminal state, or if ConnMan
-    // returned an error that service.connect() swallowed without any state change.
+    // After service.connect() returns, re-check state: ConnMan may have
+    // returned an error that service.connect() swallowed (e.g. OperationAborted
+    // for a favorite service with stale credentials) without any state change.
     if (!completer.isCompleted) {
-      // Re-read the cached service state (updated by serviceChanged events)
       final current = client.services
           .where((s) => s.objectPath == service.objectPath)
           .firstOrNull;
       if (current != null) {
         if (current.state == 'online' || current.state == 'ready') {
-          completer.complete();
+          completer.complete(_ConnectResult.success);
         } else if (current.state == 'failure') {
-          completer.completeError(current.error.isNotEmpty
+          final reason = current.error.isNotEmpty
               ? current.error
-              : 'Connection failed with no error details');
+              : 'Connection failed with no error details';
+          print('\nFAILED: $reason');
+          completer.complete(_ConnectResult.failure);
         } else if (current.state == 'idle' || current.state == 'disconnect') {
-          // ConnMan gave up without transitioning to 'failure' — likely the
-          // Connect() D-Bus call returned an error that service.connect() swallowed.
-          completer.completeError(
-            'Connection attempt ended (service state: ${current.state}). '
-            'Try removing the service first: connmanctl remove ${service.objectPath}',
-          );
+          completer.complete(_ConnectResult.staleIdle);
         }
       }
     }
 
-    // Wait for connection to complete with a fixed connection timeout.
-    // This is separate from the scan timeout (--timeout flag) because connecting
-    // may require agent interaction (password prompt) which needs much more time.
-    await completer.future.timeout(kConnectionTimeout);
-    print('\nSUCCESS: Connected to $ssid');
-  } catch (e) {
-    print('\nFAILED: $e');
-    print('If it aborted, try removing the service first: connmanctl remove ${service.objectPath}');
+    // Wait with a generous timeout (agent interaction may need user input)
+    return await completer.future.timeout(kConnectionTimeout);
+  } on TimeoutException {
+    print('\nFAILED: Connection timed out after ${kConnectionTimeout.inSeconds}s');
+    return _ConnectResult.failure;
   } finally {
-    if (sub != null) {
-      await sub.cancel();
-    }
-    await client.close();
+    await sub?.cancel();
   }
 }
