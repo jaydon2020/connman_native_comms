@@ -106,7 +106,7 @@ Future<void> main(List<String> args) async {
   // calling the agent.  Remove the service config to clear cached creds,
   // re-scan to rediscover it, then retry — ConnMan will call the agent
   // this time.
-  if (result == _ConnectResult.staleIdle && service.favorite) {
+  if (result == _ConnectResult.staleIdle) {
     print('  Service has stale credentials — removing and retrying...');
     try {
       await service.remove();

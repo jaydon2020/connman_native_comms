@@ -2,6 +2,8 @@
 
 #include <iostream>
 #include <map>
+#include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -65,21 +67,47 @@ void post_error(Dart_Port_DL port,
 }  // namespace
 
 void ServiceBridge::connect(sdbus::IConnection& conn,
-                            WorkQueue& queue,
+                            WorkQueue& /*queue*/,
                             const std::string& object_path,
                             Dart_Port_DL result_port) {
-  queue.enqueue([&conn, object_path, result_port] {
-    try {
-      auto proxy = sdbus::createProxy(conn, sdbus::ServiceName(kConnmanService),
-                                      sdbus::ObjectPath(object_path));
-      ServiceProxy client(*proxy);
-      // Increased timeout to 60 seconds for slow RPi connections
-      proxy->callMethod("Connect").onInterface("net.connman.Service").withTimeout(60000000);
-      post_success(result_port, object_path);
-    } catch (const sdbus::Error& error) {
-      post_error(result_port, object_path, error.getName(), error.getMessage());
-    }
-  });
+  // IMPORTANT: Service.Connect() is dispatched as an ASYNC call on the event
+  // loop's connection, NOT as a synchronous call on the WorkQueue thread.
+  //
+  // Why: When ConnMan needs credentials (PSK, WPA-Enterprise, etc.) it calls
+  // back to our Agent.RequestInput() method.  That callback must be dispatched
+  // by the sdbus event loop thread.  If we held a synchronous sd_bus_call() on
+  // the WorkQueue thread, the underlying bus mutex would be held during the
+  // wait, preventing the event loop from dispatching the Agent callback.
+  // This would deadlock: Connect() waits for the Agent → Agent can't run
+  // because the bus is locked by Connect().
+  //
+  // Using callMethodAsync() avoids the mutex contention: the outgoing message
+  // is sent and the event loop thread is free to process the Agent callback
+  // when it arrives.  The async reply handler then posts kDone/kError to Dart.
+
+  try {
+    auto proxy = sdbus::createProxy(conn, sdbus::ServiceName(kConnmanService),
+                                    sdbus::ObjectPath(object_path));
+
+    // Move proxy into shared_ptr so it stays alive until the async callback fires.
+    auto shared_proxy = std::shared_ptr<sdbus::IProxy>(std::move(proxy));
+
+    shared_proxy->callMethodAsync("Connect")
+        .onInterface("net.connman.Service")
+        .withTimeout(60000000)
+        .uponReplyInvoke([shared_proxy, object_path, result_port](
+                              std::optional<sdbus::Error> error) {
+          if (error) {
+            post_error(result_port, object_path, error->getName(),
+                       error->getMessage());
+          } else {
+            post_success(result_port, object_path);
+          }
+          // shared_proxy ref dropped here — destructor fires after callback.
+        });
+  } catch (const sdbus::Error& error) {
+    post_error(result_port, object_path, error.getName(), error.getMessage());
+  }
 }
 
 void ServiceBridge::disconnect(sdbus::IConnection& conn,
