@@ -102,12 +102,14 @@ Future<void> main(List<String> args) async {
   var result = await _tryConnect(client, service);
 
   // If the connection returned to idle it means ConnMan had stale cached
-  // credentials for this "favorite" service and failed silently without
-  // calling the agent.  Remove the service config to clear cached creds,
-  // re-scan to rediscover it, then retry — ConnMan will call the agent
-  // this time.
+  // credentials and failed without calling the agent.  Remove the service
+  // config to clear cached creds, re-scan to discover a fresh entry, then
+  // retry — ConnMan will call the agent this time.
   if (result == _ConnectResult.staleIdle) {
     print('  Service has stale credentials — removing and retrying...');
+
+    final removedPath = service.objectPath;
+
     try {
       await service.remove();
     } catch (e) {
@@ -116,11 +118,37 @@ Future<void> main(List<String> args) async {
       return;
     }
 
-    // Re-scan so ConnMan re-discovers the service (now without cached creds)
-    final freshService =
-        await findService(client, wifi, ssid: ssid, timeout: scanTimeout);
+    // Wait for ConnMan to actually process the removal — the Dart cache
+    // won't be updated until the kServiceRemoved event arrives.
+    try {
+      await client.serviceRemoved
+          .where((s) => s.objectPath == removedPath)
+          .first
+          .timeout(const Duration(seconds: 5));
+    } on TimeoutException {
+      // If the event didn't arrive, the service might have already been
+      // re-added by a background scan.  Continue anyway.
+    }
+
+    // Trigger a fresh scan and wait for the service to re-appear.
+    print('Scanning for "$ssid"...');
+    await wifi.scan();
+    ConnmanService? freshService;
+    try {
+      freshService = await client.serviceAdded
+          .where((s) => s.name == ssid && s.type == 'wifi')
+          .first
+          .timeout(scanTimeout);
+    } on TimeoutException {
+      // Maybe it was re-added during scan before we started listening.
+      // Check the cache.
+      freshService = client.services
+          .where((s) => s.name == ssid && s.type == 'wifi')
+          .firstOrNull;
+    }
+
     if (freshService == null) {
-      print('\nFAILED: Service not found after removal.');
+      print('\nFAILED: Service "$ssid" not found after removal.');
       await client.close();
       return;
     }
@@ -172,7 +200,7 @@ Future<_ConnectResult> _tryConnect(
               final reason = svc.error.isNotEmpty
                   ? svc.error
                   : 'Connection failed with no error details';
-              print('\nFAILED: $reason');
+              print('  [error] $reason');
               completer.complete(_ConnectResult.failure);
             }
           }
@@ -180,18 +208,27 @@ Future<_ConnectResult> _tryConnect(
       },
       onError: (e) {
         if (!completer.isCompleted) {
-          print('\nFAILED: $e');
+          print('  [error] $e');
           completer.complete(_ConnectResult.failure);
         }
       },
     );
 
-    // Now attempt connection after listener is ready.
-    await service.connect();
+    // Call serviceConnect() directly instead of service.connect() so we can
+    // see the actual D-Bus error that ConnMan returns.
+    try {
+      await client.serviceConnect(service.objectPath);
+    } on ConnmanInProgressException {
+      print('  [info] Already connecting (InProgress)');
+    } on ConnmanAlreadyConnectedException {
+      if (!completer.isCompleted) completer.complete(_ConnectResult.success);
+    } catch (e) {
+      // Log the real error so we know what ConnMan returned
+      print('  [D-Bus error] $e');
+    }
 
-    // After service.connect() returns, re-check state: ConnMan may have
-    // returned an error that service.connect() swallowed (e.g. OperationAborted
-    // for a favorite service with stale credentials) without any state change.
+    // After serviceConnect() returns, re-check state: ConnMan may have
+    // returned an error without any state change.
     if (!completer.isCompleted) {
       final current = client.services
           .where((s) => s.objectPath == service.objectPath)
@@ -203,7 +240,7 @@ Future<_ConnectResult> _tryConnect(
           final reason = current.error.isNotEmpty
               ? current.error
               : 'Connection failed with no error details';
-          print('\nFAILED: $reason');
+          print('  [error] $reason');
           completer.complete(_ConnectResult.failure);
         } else if (current.state == 'idle' || current.state == 'disconnect') {
           completer.complete(_ConnectResult.staleIdle);
@@ -220,3 +257,4 @@ Future<_ConnectResult> _tryConnect(
     await sub?.cancel();
   }
 }
+
